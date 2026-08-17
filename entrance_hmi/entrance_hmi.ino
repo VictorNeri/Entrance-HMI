@@ -1,37 +1,22 @@
-// M0: EPD driver bring-up. Static full-refresh screen to verify the
-// copied driver + pin map are correct before any navigation/network
-// code is layered on. See docs/plans in the parent repo history for
-// the full milestone plan.
-#include "src/epd_driver/EPD.h"
-#include "src/epd_driver/EPD_Init.h"
-
-// Panel power enable — must be driven HIGH before EPD_GPIOInit()/any
-// SPI traffic, confirmed against vendor-reference main.ino setup().
-#define PANEL_POWER_PIN 7
-
-uint8_t ImageBW[27200];
+// M1: button-driven navigation across the 5 top-level screens. Each
+// screen is a placeholder — real data is wired in starting at M2.
+#include "src/app/app_state.h"
+#include "src/app/nav.h"
+#include "src/input/buttons.h"
+#include "src/ui/ui_common.h"
 
 void setup() {
   Serial.begin(115200);
-
-  pinMode(PANEL_POWER_PIN, OUTPUT);
-  digitalWrite(PANEL_POWER_PIN, HIGH);
-
-  EPD_GPIOInit();
-  Paint_NewImage(ImageBW, EPD_W, EPD_H, Rotation, WHITE);
-  Paint_Clear(WHITE);
-
-  EPD_ShowString(20, 20, "Hello Entrance HMI", 48, BLACK);
-  EPD_ShowString(20, 90, "M0: driver bring-up OK", 24, BLACK);
-
-  EPD_Init();
-  EPD_Display(ImageBW);
-  EPD_Update();
-  EPD_DeepSleep();
-
-  Serial.println("M0 boot screen shown.");
+  ui_init();
+  buttons_init();
+  ui_render_current_screen(true);
+  Serial.println("M1 navigation skeleton ready.");
 }
 
 void loop() {
-  // Static screen for M0 — nothing to do yet.
+  ButtonEvent event = buttons_poll();
+  RedrawKind redraw = nav_handle_event(event);
+  if (redraw != RedrawKind::NONE) {
+    ui_render_current_screen(redraw == RedrawKind::FULL);
+  }
 }
