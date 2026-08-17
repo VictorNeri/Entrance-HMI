@@ -1,0 +1,54 @@
+#include "wifi_manager.h"
+#include <WiFi.h>
+#include "../../config.h"
+
+namespace {
+
+constexpr unsigned long BOOT_CONNECT_TIMEOUT_MS = 15000;
+constexpr unsigned long BACKOFF_STEPS_MS[] = {0, 5000, 15000, 60000};
+constexpr size_t BACKOFF_STEPS_LEN = sizeof(BACKOFF_STEPS_MS) / sizeof(BACKOFF_STEPS_MS[0]);
+
+size_t backoff_index = 0;
+unsigned long next_attempt_ms = 0;
+bool was_connected = false;
+
+}  // namespace
+
+void wifi_manager_begin() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < BOOT_CONNECT_TIMEOUT_MS) {
+    delay(250);
+  }
+
+  was_connected = WiFi.status() == WL_CONNECTED;
+  backoff_index = 0;
+  next_attempt_ms = 0;
+}
+
+void wifi_manager_tick() {
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!was_connected) {
+      backoff_index = 0;  // reset backoff after a successful (re)connect
+    }
+    was_connected = true;
+    return;
+  }
+
+  was_connected = false;
+  unsigned long now = millis();
+  if (now < next_attempt_ms) return;
+
+  WiFi.disconnect();
+  WiFi.reconnect();
+
+  size_t idx = backoff_index < BACKOFF_STEPS_LEN ? backoff_index : BACKOFF_STEPS_LEN - 1;
+  next_attempt_ms = now + BACKOFF_STEPS_MS[idx];
+  if (backoff_index < BACKOFF_STEPS_LEN - 1) backoff_index++;
+}
+
+bool wifi_is_connected() {
+  return WiFi.status() == WL_CONNECTED;
+}
