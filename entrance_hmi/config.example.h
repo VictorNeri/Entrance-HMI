@@ -15,3 +15,9 @@
 #define TZ_STRING "CET-1CEST,M3.5.0,M10.5.0/3"
 #define NTP_SERVER1 "pool.ntp.org"
 #define NTP_SERVER2 "se.pool.ntp.org"
+
+// --- Weather (OpenWeatherMap, free v2.5 "current weather" endpoint) ---
+// lat/lon preferred over city-name lookup — unambiguous and stable.
+#define OWM_API_KEY "your-openweathermap-api-key"
+#define OWM_LAT "59.3293"
+#define OWM_LON "18.0686"
