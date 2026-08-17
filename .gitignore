@@ -1,0 +1,12 @@
+entrance_hmi/config.h
+
+# Arduino IDE / build artifacts
+*.o
+*.elf
+*.bin.tmp
+build/
+.pio/
+
+# OS/editor
+.DS_Store
+*.swp
