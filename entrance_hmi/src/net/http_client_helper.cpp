@@ -2,7 +2,8 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 
-bool http_get_json(const char *url, JsonDocument &doc, uint16_t timeout_ms) {
+bool http_get_json(const char *url, JsonDocument &doc, uint16_t timeout_ms,
+                    const JsonDocument *filter) {
   WiFiClientSecure client;
   client.setInsecure();
 
@@ -18,7 +19,10 @@ bool http_get_json(const char *url, JsonDocument &doc, uint16_t timeout_ms) {
   if (status == HTTP_CODE_OK) {
     // Deserialize straight from the response stream rather than
     // buffering the whole body into a String first — smaller peak heap.
-    DeserializationError err = deserializeJson(doc, http.getStream());
+    DeserializationError err =
+        filter != nullptr ? deserializeJson(doc, http.getStream(),
+                                             DeserializationOption::Filter(*filter))
+                           : deserializeJson(doc, http.getStream());
     ok = err == DeserializationError::Ok;
   }
 

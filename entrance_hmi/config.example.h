@@ -21,3 +21,11 @@
 #define OWM_API_KEY "your-openweathermap-api-key"
 #define OWM_LAT "59.3293"
 #define OWM_LON "18.0686"
+
+// --- Transit (SL Transport API, free/keyless) ---
+// Find your own stop's site ID: fetch
+// https://transport.integration.sl.se/v1/sites and search the JSON by
+// stop name (or use trafiklab.se's stop lookup). 9001 = T-Centralen,
+// a placeholder for schema testing — replace with your actual nearest
+// stop before relying on this.
+#define SL_SITE_ID "9001"

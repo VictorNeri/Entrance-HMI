@@ -11,4 +11,10 @@
 // project plan for the rationale. Only one such call should be in
 // flight at a time: the WiFiClientSecure instance is the single
 // biggest transient memory consumer in this firmware.
-bool http_get_json(const char *url, JsonDocument &doc, uint16_t timeout_ms = 8000);
+// `filter`, if given, is passed to ArduinoJson's DeserializationOption::Filter
+// so only the fields it names are actually parsed/stored — needed for
+// endpoints that return more data than we want to hold in memory at
+// once (e.g. SL's departures response, tens of KB with fields we
+// don't use).
+bool http_get_json(const char *url, JsonDocument &doc, uint16_t timeout_ms = 8000,
+                    const JsonDocument *filter = nullptr);
