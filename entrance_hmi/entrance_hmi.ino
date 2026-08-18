@@ -1,4 +1,5 @@
-// M5: MQTT-configured Home Assistant control buttons on HA_CONTROL.
+// Entrance HMI — weather, SL transit departures, and MQTT-configured
+// Home Assistant control buttons on a 5-screen, 5-button e-paper kiosk.
 #include "src/app/app_state.h"
 #include "src/app/nav.h"
 #include "src/input/buttons.h"
@@ -18,6 +19,8 @@ constexpr unsigned long TRANSIT_POLL_BACKGROUND_MS = 300UL * 1000;  // otherwise
 
 void setup() {
   Serial.begin(115200);
+  delay(500);
+
   ui_init();
   buttons_init();
 
@@ -27,10 +30,20 @@ void setup() {
 
   wifi_manager_begin();
   ui_render_current_screen(true);
-  Serial.println("M5 MQTT + HA control ready.");
+  Serial.println("Entrance HMI ready.");
 }
 
 void loop() {
+  // Periodic free-heap/WiFi-state log — the M7 soak-test checkpoint
+  // for watching heap trend and reconnect resilience over days of
+  // uptime, not just debug scaffolding.
+  static unsigned long last_heartbeat_ms = 0;
+  if (millis() - last_heartbeat_ms >= 60UL * 1000) {
+    last_heartbeat_ms = millis();
+    Serial.printf("[heartbeat] up=%lums wifi=%d heap=%u\n", millis(), wifi_is_connected(),
+                  (unsigned)ESP.getFreeHeap());
+  }
+
   wifi_manager_tick();
   time_sync_tick();
 
