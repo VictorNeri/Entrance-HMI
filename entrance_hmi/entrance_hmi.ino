@@ -1,16 +1,18 @@
-// M4: live SL departures on the TRANSIT screen. HA_CONTROL/HOME
-// remain M1 placeholders.
+// M5: MQTT-configured Home Assistant control buttons on HA_CONTROL.
 #include "src/app/app_state.h"
 #include "src/app/nav.h"
 #include "src/input/buttons.h"
+#include "src/net/mqtt_client.h"
 #include "src/net/time_sync.h"
 #include "src/net/transit_client.h"
 #include "src/net/weather_client.h"
 #include "src/net/wifi_manager.h"
+#include "src/storage/button_config_store.h"
+#include "src/storage/littlefs_setup.h"
 #include "src/ui/ui_common.h"
 
 namespace {
-constexpr unsigned long TRANSIT_POLL_ACTIVE_MS = 90UL * 1000;    // while TRANSIT is visible
+constexpr unsigned long TRANSIT_POLL_ACTIVE_MS = 90UL * 1000;      // while TRANSIT is visible
 constexpr unsigned long TRANSIT_POLL_BACKGROUND_MS = 300UL * 1000;  // otherwise
 }  // namespace
 
@@ -18,9 +20,14 @@ void setup() {
   Serial.begin(115200);
   ui_init();
   buttons_init();
+
+  littlefs_setup_begin();
+  // Shows cached HA entities immediately, even before MQTT connects.
+  button_config_store_load_from_disk();
+
   wifi_manager_begin();
   ui_render_current_screen(true);
-  Serial.println("M4 transit screen ready.");
+  Serial.println("M5 MQTT + HA control ready.");
 }
 
 void loop() {
@@ -41,6 +48,11 @@ void loop() {
     ui_render_current_screen(false);
   }
 
+  bool ha_updated_visible = mqtt_client_tick() && app_state.current_screen == Screen::HA_CONTROL;
+  if (ha_updated_visible) {
+    ui_render_current_screen(false);
+  }
+
   ButtonEvent event = buttons_poll();
 
   if (event.button == Button::OK) {
@@ -50,6 +62,18 @@ void loop() {
     }
     if (app_state.current_screen == Screen::TRANSIT && transit_client_fetch_now()) {
       ui_render_current_screen(false);
+      return;
+    }
+    if (app_state.current_screen == Screen::HA_CONTROL && ha_entity_list.count > 0) {
+      uint8_t index = app_state.list_cursor < ha_entity_list.count ? app_state.list_cursor
+                                                                      : ha_entity_list.count - 1;
+      const HaEntity &entity = ha_entity_list.items[index];
+      if (entity.action == "toggle") {
+        mqtt_client_publish_toggle(entity.id);
+        // No redraw here — the displayed state only updates once HA's
+        // statestream confirms the change (via mqtt_client_tick()
+        // above), not optimistically.
+      }
       return;
     }
   }

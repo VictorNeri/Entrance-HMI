@@ -29,3 +29,11 @@
 // a placeholder for schema testing — replace with your actual nearest
 // stop before relying on this.
 #define SL_SITE_ID "9001"
+
+// --- MQTT (Home Assistant integration) ---
+#define MQTT_HOST "your-mqtt-broker-ip-or-hostname"
+#define MQTT_PORT 1883
+#define MQTT_USERNAME ""  // leave empty for anonymous/no-auth brokers
+#define MQTT_PASSWORD ""
+#define MQTT_CLIENT_ID "entrance-hmi"
+#define MQTT_TOPIC_PREFIX "entrance-hmi"
