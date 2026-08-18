@@ -43,14 +43,20 @@ void ui_render_current_screen(bool force_full_refresh) {
       break;
   }
 
+  // Upgrade to a full refresh if one is due regardless of what the
+  // caller asked for (ghosting hygiene) — piggybacking on a render
+  // that's already happening avoids a redundant extra push.
+  bool full = force_full_refresh || app_state_needs_forced_full_refresh();
+
   // Re-init before every push, matching the vendor's proven pattern
   // (factory main.ino calls this ahead of both full and partial pushes,
   // not the bare EPD_Init() left in an unused commented-out code path).
   EPD_GPIOInit();
   EPD_FastMode1Init();
   EPD_Display(image_buffer);
-  if (force_full_refresh) {
+  if (full) {
     EPD_Update();
+    app_state_mark_full_refresh_done();
   } else {
     EPD_PartUpdate();
   }

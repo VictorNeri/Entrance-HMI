@@ -13,3 +13,17 @@ Everything under [`vendor-reference/`](vendor-reference/) is the original, unmod
 - ESP32-S3-WROOM-1-N8R8, 8MB Flash, 8MB PSRAM
 - 5.79" black/white e-paper, dual SSD1683 driver, 792×272 visible resolution
 - 5 physical buttons (HOME/EXIT/PRV/NEXT/OK), no touch input
+
+## Build
+
+Board: `esp32:esp32:esp32s3`. **Set these board options before compiling/flashing** — the ESP32 Arduino core's default board options target a 4MB-flash variant, not this board's real 8MB flash + 8MB PSRAM, and building against the default 1.2MB APP partition runs out of headroom well before this firmware is done growing:
+
+- Flash Size: `8MB (64Mb)`
+- Partition Scheme: `8M with spiffs (3MB APP/1.5MB SPIFFS)`
+- PSRAM: `QSPI PSRAM` (Enabled)
+
+Arduino IDE: set these in Tools menu after selecting the board. `arduino-cli`:
+
+```bash
+arduino-cli compile --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=enabled" entrance_hmi
+```

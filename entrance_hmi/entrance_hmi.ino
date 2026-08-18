@@ -34,6 +34,13 @@ void loop() {
   wifi_manager_tick();
   time_sync_tick();
 
+  // Ghosting hygiene: fires even during long idle periods with no
+  // other render trigger (ui_common's own check only fires piggybacked
+  // on a render that's already happening for some other reason).
+  if (app_state_needs_forced_full_refresh()) {
+    ui_render_current_screen(true);
+  }
+
   bool weather_updated_visible =
       weather_client_tick() && app_state.current_screen == Screen::WEATHER;
   if (weather_updated_visible) {
