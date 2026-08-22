@@ -1,6 +1,6 @@
 #include "wifi_manager.h"
 #include <WiFi.h>
-#include "../../config.h"
+#include "../storage/sd_config.h"
 
 namespace {
 
@@ -16,7 +16,7 @@ bool was_connected = false;
 
 void wifi_manager_begin() {
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(sd_config.wifi_ssid.c_str(), sd_config.wifi_password.c_str());
 
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < BOOT_CONNECT_TIMEOUT_MS) {

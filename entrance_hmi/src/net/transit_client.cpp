@@ -1,6 +1,6 @@
 #include "transit_client.h"
 #include <ArduinoJson.h>
-#include "../../config.h"
+#include "../storage/sd_config.h"
 #include "http_client_helper.h"
 #include "wifi_manager.h"
 
@@ -17,7 +17,8 @@ bool fetch_once() {
   // needs to hold in memory at once.
   char url[160];
   snprintf(url, sizeof(url),
-           "https://transport.integration.sl.se/v1/sites/%s/departures?forecast=60", SL_SITE_ID);
+           "https://transport.integration.sl.se/v1/sites/%s/departures?forecast=60",
+           sd_config.sl_site_id.c_str());
 
   // Field filter: only parse what we display. Keeps peak memory
   // bounded even at a busy stop with many departures, since fields we

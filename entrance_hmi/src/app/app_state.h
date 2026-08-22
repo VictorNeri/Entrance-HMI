@@ -8,6 +8,8 @@ struct AppState {
   int8_t list_cursor = 0;
   unsigned long last_full_refresh_ms = 0;
   int last_daily_refresh_yday = -1;  // tm_yday of the last forced daily refresh, -1 = never
+  unsigned long last_manual_interaction_ms = 0;
+  unsigned long last_auto_rotation_ms = 0;
 };
 
 extern AppState app_state;
@@ -34,3 +36,15 @@ bool app_state_needs_forced_full_refresh();
 // Call whenever a full refresh actually happens, so the scheduling
 // clock above resets.
 void app_state_mark_full_refresh_done();
+
+// Auto-rotation: cycles HOME -> WEATHER -> TRANSIT on its own, using
+// sd_config.screen_rotation_interval_ms both as the cycle cadence and
+// as the "how long since the last button press" idle threshold before
+// resuming — one knob, not two. Never fires while on HA_CONTROL/STATUS,
+// so it can't interrupt someone mid-interaction with the HA controls;
+// it also won't pull the user back into rotation from those screens —
+// resuming only happens once they navigate back themselves.
+void app_state_mark_manual_interaction();
+bool app_state_should_auto_rotate();
+Screen app_state_next_rotation_screen();
+void app_state_mark_auto_rotated();

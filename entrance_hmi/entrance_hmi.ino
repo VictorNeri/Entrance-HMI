@@ -10,12 +10,8 @@
 #include "src/net/wifi_manager.h"
 #include "src/storage/button_config_store.h"
 #include "src/storage/littlefs_setup.h"
+#include "src/storage/sd_config.h"
 #include "src/ui/ui_common.h"
-
-namespace {
-constexpr unsigned long TRANSIT_POLL_ACTIVE_MS = 90UL * 1000;      // while TRANSIT is visible
-constexpr unsigned long TRANSIT_POLL_BACKGROUND_MS = 300UL * 1000;  // otherwise
-}  // namespace
 
 void setup() {
   Serial.begin(115200);
@@ -23,6 +19,10 @@ void setup() {
 
   ui_init();
   buttons_init();
+
+  // Before anything WiFi-dependent — supplies wifi_manager's credentials
+  // and transit_client's station ID.
+  sd_config_load();
 
   littlefs_setup_begin();
   // Shows cached HA entities immediately, even before MQTT connects.
@@ -62,7 +62,7 @@ void loop() {
 
   bool transit_on_screen = app_state.current_screen == Screen::TRANSIT;
   unsigned long transit_poll_interval_ms =
-      transit_on_screen ? TRANSIT_POLL_ACTIVE_MS : TRANSIT_POLL_BACKGROUND_MS;
+      transit_on_screen ? sd_config.transit_poll_active_ms : sd_config.transit_poll_background_ms;
   bool transit_updated_visible = transit_client_tick(transit_poll_interval_ms) && transit_on_screen;
   if (transit_updated_visible) {
     ui_render_current_screen(false);
@@ -73,7 +73,24 @@ void loop() {
     ui_render_current_screen(false);
   }
 
+  // Auto-rotation only cycles HOME/WEATHER/TRANSIT and only fires once
+  // idle — see app_state_should_auto_rotate() for the exact rule.
+  if (app_state_should_auto_rotate()) {
+    app_state_enter_screen(app_state_next_rotation_screen());
+    app_state_mark_auto_rotated();
+    // Matches manual navigation's re-arm-on-entry behavior below —
+    // without this, rotating onto TRANSIT would show stale data until
+    // the next background-cadence tick, up to 5 minutes later.
+    if (app_state.current_screen == Screen::TRANSIT) {
+      transit_client_fetch_now();
+    }
+    ui_render_current_screen(true);
+  }
+
   ButtonEvent event = buttons_poll();
+  if (event.button != Button::NONE) {
+    app_state_mark_manual_interaction();
+  }
 
   if (event.button == Button::OK) {
     if (app_state.current_screen == Screen::WEATHER && weather_client_fetch_now()) {

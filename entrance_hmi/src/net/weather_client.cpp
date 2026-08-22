@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include <math.h>
 #include "../../config.h"
+#include "../storage/sd_config.h"
 #include "http_client_helper.h"
 #include "wifi_manager.h"
 
@@ -9,7 +10,6 @@ WeatherData weather_data;
 
 namespace {
 
-constexpr unsigned long POLL_INTERVAL_MS = 10UL * 60 * 1000;  // 10 min
 unsigned long last_fetch_ms = 0;
 bool changed_this_fetch = false;
 
@@ -56,7 +56,7 @@ bool fetch_once() {
 bool weather_client_tick() {
   if (!wifi_is_connected()) return false;
   unsigned long now = millis();
-  if (now - last_fetch_ms < POLL_INTERVAL_MS) return false;
+  if (now - last_fetch_ms < sd_config.weather_poll_interval_ms) return false;
   last_fetch_ms = now;
   bool ok = fetch_once();
   return ok && changed_this_fetch;
