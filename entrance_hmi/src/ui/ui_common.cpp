@@ -20,6 +20,16 @@ void ui_init() {
   EPD_GPIOInit();
   Paint_NewImage(image_buffer, EPD_W, EPD_H, Rotation, WHITE);
   Paint_Clear(WHITE);
+
+  // One-time hardware-level clear: writes directly into both SSD1683
+  // controllers' (master+slave) internal RAM planes via raw register
+  // writes, independent of image_buffer. Without this, the panel's
+  // first-ever content push has nothing well-defined to diff against,
+  // which can show as streaking/vertical-line corruption. Matches the
+  // vendor's proven boot sequence in factory main.ino.
+  EPD_FastMode1Init();
+  EPD_Display_Clear();
+  EPD_Update();
 }
 
 void ui_render_current_screen(bool force_full_refresh) {
