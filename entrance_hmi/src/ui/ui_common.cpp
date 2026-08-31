@@ -7,6 +7,7 @@
 #include "screen_status.h"
 #include "screen_transit.h"
 #include "screen_weather.h"
+#include "ui_chrome.h"
 
 namespace {
 constexpr uint8_t PANEL_POWER_PIN = 7;
@@ -52,6 +53,10 @@ void ui_render_current_screen(bool force_full_refresh) {
       screen_status_render();
       break;
   }
+
+  // Drawn on top of whatever the screen painted, so chrome always wins
+  // at its own regions regardless of any screen miscalculation.
+  ui_chrome_render();
 
   // Upgrade to a full refresh if one is due regardless of what the
   // caller asked for (ghosting hygiene) — piggybacking on a render

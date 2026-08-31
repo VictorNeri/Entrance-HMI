@@ -20,7 +20,7 @@ bool fetch_once() {
            OWM_LAT, OWM_LON, OWM_API_KEY);
 
   JsonDocument doc;
-  bool ok = http_get_json(url, doc);
+  bool ok = http_get_json(url, doc, 8000, nullptr, "weather");
   changed_this_fetch = false;
 
   if (ok) {
@@ -32,6 +32,7 @@ bool fetch_once() {
       next.temp_c = doc["main"]["temp"] | 0.0f;
       next.feels_like_c = doc["main"]["feels_like"] | 0.0f;
       next.humidity = doc["main"]["humidity"] | 0;
+      next.wind_speed_ms = doc["wind"]["speed"] | 0.0f;
       next.description = weather_arr[0]["description"].as<const char *>();
       next.icon = weather_arr[0]["icon"].as<const char *>();
       next.valid = true;

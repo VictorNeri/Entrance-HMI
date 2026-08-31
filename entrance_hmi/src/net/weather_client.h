@@ -6,6 +6,7 @@ struct WeatherData {
   float temp_c = 0;
   float feels_like_c = 0;
   int humidity = 0;
+  float wind_speed_ms = 0;  // meters/second, from OWM's wind.speed
   String description;  // e.g. "clear sky"
   String icon;          // OpenWeatherMap icon code, e.g. "01d"
   unsigned long fetched_at_ms = 0;

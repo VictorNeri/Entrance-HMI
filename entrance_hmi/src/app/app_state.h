@@ -14,13 +14,23 @@ struct AppState {
 
 extern AppState app_state;
 
-// TRANSIT and HA_CONTROL own a scrollable list; other screens don't.
-// This single flag is what nav.cpp uses to decide whether PRV/NEXT
-// scroll the current screen's list or cycle to a different screen.
+// Single source of truth for "all screens" — nav.cpp's cycle ring, the
+// idle auto-rotation ring, and the footer dock's labels all derive from
+// this instead of each hand-maintaining their own list.
+struct ScreenInfo {
+  Screen screen;
+  const char *label;      // footer dock label, keep <=7 chars for the cell width
+  bool in_cycle_ring;      // PRV/NEXT (when not list-scrolling) cycles onto it
+  bool in_rotation_ring;    // idle auto-rotation cycles onto it
+};
+extern const ScreenInfo SCREEN_TABLE[];
+extern const size_t SCREEN_TABLE_LEN;
+
+// HA_CONTROL owns a scrollable list; other screens don't. This single
+// flag is what nav.cpp uses to decide whether PRV/NEXT scroll the
+// current screen's list or cycle to a different screen.
 bool screen_has_list(Screen screen);
 
-// Placeholder counts for M1 — replaced by real DepartureList/HaEntityList
-// sizes once M4/M5 wire up live data.
 int8_t screen_list_length(Screen screen);
 
 void app_state_enter_screen(Screen screen);

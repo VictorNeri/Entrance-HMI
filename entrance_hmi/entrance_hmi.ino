@@ -4,11 +4,14 @@
 #include "src/app/nav.h"
 #include "src/input/buttons.h"
 #include "src/net/mqtt_client.h"
+#include "src/net/ota_manager.h"
 #include "src/net/time_sync.h"
 #include "src/net/transit_client.h"
 #include "src/net/weather_client.h"
+#include "src/net/weather_forecast_client.h"
 #include "src/net/wifi_manager.h"
 #include "src/storage/button_config_store.h"
+#include "src/storage/calendar_store.h"
 #include "src/storage/littlefs_setup.h"
 #include "src/storage/sd_config.h"
 #include "src/ui/ui_common.h"
@@ -27,6 +30,8 @@ void setup() {
   littlefs_setup_begin();
   // Shows cached HA entities immediately, even before MQTT connects.
   button_config_store_load_from_disk();
+  // Same reasoning for the header's pending-events indicator.
+  calendar_store_load_from_disk();
 
   wifi_manager_begin();
   ui_render_current_screen(true);
@@ -45,7 +50,21 @@ void loop() {
   }
 
   wifi_manager_tick();
+  ota_manager_tick();
   time_sync_tick();
+
+  // Header clock: redraw (partial) whenever the local minute changes.
+  // Per-second is off the table (full-buffer repaint + e-paper refresh
+  // latency), once/minute is the realistic ceiling. The -1 sentinel
+  // also naturally covers "NTP just synced for the first time" (any
+  // real tm_min 0-59 differs from it), replacing the header's "--:--"
+  // placeholder as soon as time becomes available.
+  static int last_clock_minute = -1;
+  struct tm clock_tm;
+  if (time_sync_get_local(clock_tm) && clock_tm.tm_min != last_clock_minute) {
+    last_clock_minute = clock_tm.tm_min;
+    ui_render_current_screen(false);
+  }
 
   // Ghosting hygiene: fires even during long idle periods with no
   // other render trigger (ui_common's own check only fires piggybacked
@@ -54,9 +73,10 @@ void loop() {
     ui_render_current_screen(true);
   }
 
-  bool weather_updated_visible =
-      weather_client_tick() && app_state.current_screen == Screen::WEATHER;
-  if (weather_updated_visible) {
+  bool weather_on_screen = app_state.current_screen == Screen::WEATHER;
+  bool weather_updated_visible = weather_client_tick() && weather_on_screen;
+  bool forecast_updated_visible = weather_forecast_client_tick() && weather_on_screen;
+  if (weather_updated_visible || forecast_updated_visible) {
     ui_render_current_screen(false);
   }
 
@@ -68,8 +88,12 @@ void loop() {
     ui_render_current_screen(false);
   }
 
-  bool ha_updated_visible = mqtt_client_tick() && app_state.current_screen == Screen::HA_CONTROL;
-  if (ha_updated_visible) {
+  MqttTickResult mqtt_tick = mqtt_client_tick();
+  bool ha_updated_visible = mqtt_tick.ha_changed && app_state.current_screen == Screen::HA_CONTROL;
+  // Calendar changes redraw regardless of visible screen — the header's
+  // pending-events indicator is present on every screen, unlike
+  // HA_CONTROL's list which only matters while that screen is shown.
+  if (ha_updated_visible || mqtt_tick.calendar_changed) {
     ui_render_current_screen(false);
   }
 
@@ -93,9 +117,15 @@ void loop() {
   }
 
   if (event.button == Button::OK) {
-    if (app_state.current_screen == Screen::WEATHER && weather_client_fetch_now()) {
-      ui_render_current_screen(false);
-      return;
+    if (app_state.current_screen == Screen::WEATHER) {
+      // Both fetches run regardless of the other's outcome (either one
+      // succeeding is worth a redraw), matching the pattern below.
+      bool current_ok = weather_client_fetch_now();
+      bool forecast_ok = weather_forecast_client_fetch_now();
+      if (current_ok || forecast_ok) {
+        ui_render_current_screen(false);
+        return;
+      }
     }
     if (app_state.current_screen == Screen::TRANSIT && transit_client_fetch_now()) {
       ui_render_current_screen(false);

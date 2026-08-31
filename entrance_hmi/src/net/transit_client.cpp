@@ -11,13 +11,18 @@ namespace {
 unsigned long last_fetch_ms = 0;
 
 bool fetch_once() {
-  // forecast=60 bounds the response to the next hour — SL's default
-  // window can otherwise return dozens of departures at a busy hub
-  // (verified: ~40KB unfiltered JSON), which is more than this device
-  // needs to hold in memory at once.
+  // forecast=10 bounds the response to the next 10 minutes. We only
+  // ever display the single soonest departure per mode, so a short
+  // window is enough — and it matters a lot more than that: at a busy
+  // interchange (verified against the live API: site 9109 returns
+  // ~30KB/57 departures at forecast=60 vs. ~11KB/20 at forecast=10),
+  // the larger response was consistently failing to fully download on
+  // device (confirmed via serial: "HTTP 200 but JSON parse failed:
+  // IncompleteInput" — the connection closes before the body finishes
+  // arriving), causing every fetch at that stop to fail outright.
   char url[160];
   snprintf(url, sizeof(url),
-           "https://transport.integration.sl.se/v1/sites/%s/departures?forecast=60",
+           "https://transport.integration.sl.se/v1/sites/%s/departures?forecast=10",
            sd_config.sl_site_id.c_str());
 
   // Field filter: only parse what we display. Keeps peak memory
@@ -30,8 +35,14 @@ bool fetch_once() {
   filter["departures"][0]["line"]["designation"] = true;
   filter["departures"][0]["line"]["transport_mode"] = true;
 
+  // The default 8s budget (http_get_json's default) is tuned for small
+  // responses like weather's; a busy interchange can return 50+
+  // departures (~30KB unfiltered) here, and on-device that download
+  // plus a fresh TLS handshake each poll (no session reuse) can run
+  // past 8s even though the API itself responds in well under a
+  // second — confirmed by direct testing against the live SL API.
   JsonDocument doc;
-  bool ok = http_get_json(url, doc, 8000, &filter);
+  bool ok = http_get_json(url, doc, 15000, &filter, "transit");
 
   if (ok) {
     DepartureList next;

@@ -26,3 +26,10 @@
 #define MQTT_PASSWORD ""
 #define MQTT_CLIENT_ID "entrance-hmi"
 #define MQTT_TOPIC_PREFIX "entrance-hmi"
+
+// --- OTA (over-the-air firmware updates over WiFi) ---
+// Required, not optional — ArduinoOTA with an empty password lets
+// anyone on the LAN push arbitrary firmware to the device. Pick your
+// own strong value; treat it like the credentials above.
+#define OTA_PASSWORD "your-ota-password"
+#define OTA_HOSTNAME "entrance-hmi"

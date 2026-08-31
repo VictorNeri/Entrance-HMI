@@ -4,13 +4,13 @@
 #include "../epd_driver/EPD.h"
 #include "../epd_driver/EPD_Init.h"
 #include "../storage/button_config_store.h"
+#include "ui_chrome.h"
 #include "ui_text_unicode.h"
 
 void screen_ha_control_render() {
-  EPD_ShowString(20, 20, "HOME ASSISTANT", 48, BLACK);
-
   if (!ha_entity_list.valid || ha_entity_list.count == 0) {
-    EPD_ShowString(20, 90, "No entities configured yet - waiting for MQTT config", 16, BLACK);
+    EPD_ShowString(UI_CONTENT_LEFT, UI_CONTENT_BODY_TOP,
+                   "No entities configured yet - waiting for MQTT config", 24, BLACK);
   } else {
     // A background config/state update can shrink the list between
     // nav's clamp (against the previous count) and this render.
@@ -18,17 +18,23 @@ void screen_ha_control_render() {
                                                                     : ha_entity_list.count - 1;
     const HaEntity &entity = ha_entity_list.items[index];
 
-    draw_utf8_string(20, 90, entity.label.c_str(), 24, BLACK);
+    // MQTT-supplied labels are unbounded in length; at size 48 (24px/
+    // char) anything past ~26 chars runs past UI_CONTENT_RIGHT toward
+    // the rail, and EPD_ShowChar has no bounds checking of its own —
+    // truncate defensively rather than trust the input.
+    char label[27];
+    snprintf(label, sizeof(label), "%s", entity.label.c_str());
+    draw_utf8_string(UI_CONTENT_LEFT, UI_CONTENT_BODY_TOP, label, 48, BLACK);
 
     const char *state_text = !entity.state_known ? "state: unknown"
                               : entity.state_on   ? "state: ON"
                                                    : "state: OFF";
-    EPD_ShowString(20, 130, state_text, 16, BLACK);
+    EPD_ShowString(UI_CONTENT_LEFT, UI_CONTENT_BODY_TOP + 50, state_text, 24, BLACK);
 
     char footer[32];
     snprintf(footer, sizeof(footer), "(%d / %d)", index + 1, ha_entity_list.count);
-    EPD_ShowString(20, 170, footer, 16, BLACK);
+    EPD_ShowString(UI_CONTENT_LEFT, UI_CONTENT_BODY_TOP + 82, footer, 24, BLACK);
   }
 
-  EPD_ShowString(20, 230, "PRV/NEXT: scroll   OK: toggle   EXIT: home", 12, BLACK);
+  EPD_ShowString(UI_CONTENT_LEFT, UI_CONTENT_HINT_Y, "OK: toggle", 16, BLACK);
 }

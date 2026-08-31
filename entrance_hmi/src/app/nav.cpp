@@ -3,21 +3,34 @@
 
 namespace {
 
-constexpr Screen SCREEN_RING[] = {Screen::HOME, Screen::WEATHER, Screen::TRANSIT,
-                                   Screen::HA_CONTROL};
-constexpr size_t SCREEN_RING_LEN = sizeof(SCREEN_RING) / sizeof(SCREEN_RING[0]);
-
-size_t ring_index_of(Screen screen) {
-  for (size_t i = 0; i < SCREEN_RING_LEN; i++) {
-    if (SCREEN_RING[i] == screen) return i;
+// Filters SCREEN_TABLE (the single source of truth, shared with the
+// idle auto-rotation ring in app_state.cpp and the footer dock in
+// ui_chrome.cpp) down to the screens PRV/NEXT cycle through. Rebuilt
+// on each call rather than cached — SCREEN_TABLE_LEN is 5, the cost is
+// negligible, and it avoids relying on cross-translation-unit global
+// constructor ordering.
+size_t build_cycle_ring(Screen out[]) {
+  size_t len = 0;
+  for (size_t i = 0; i < SCREEN_TABLE_LEN; i++) {
+    if (SCREEN_TABLE[i].in_cycle_ring) out[len++] = SCREEN_TABLE[i].screen;
   }
-  return 0;
+  return len;
 }
 
 void cycle_screen(int8_t direction) {
-  size_t idx = ring_index_of(app_state.current_screen);
-  idx = (idx + SCREEN_RING_LEN + direction) % SCREEN_RING_LEN;
-  app_state_enter_screen(SCREEN_RING[idx]);
+  Screen ring[SCREEN_TABLE_LEN];
+  size_t len = build_cycle_ring(ring);
+  if (len == 0) return;
+
+  size_t idx = 0;
+  for (size_t i = 0; i < len; i++) {
+    if (ring[i] == app_state.current_screen) {
+      idx = i;
+      break;
+    }
+  }
+  idx = (idx + len + direction) % len;
+  app_state_enter_screen(ring[idx]);
 }
 
 // Clamped, not wraparound — avoids confusing jumps near real-time list data.

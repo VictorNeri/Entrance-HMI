@@ -16,5 +16,9 @@
 // endpoints that return more data than we want to hold in memory at
 // once (e.g. SL's departures response, tens of KB with fields we
 // don't use).
+//
+// `context`, if given, tags the caller (e.g. "weather", "transit") in
+// both the serial diagnostic and the error_log entry shown on the
+// STATUS screen, so a failure there is traceable to which fetch it was.
 bool http_get_json(const char *url, JsonDocument &doc, uint16_t timeout_ms = 8000,
-                    const JsonDocument *filter = nullptr);
+                    const JsonDocument *filter = nullptr, const char *context = "http");

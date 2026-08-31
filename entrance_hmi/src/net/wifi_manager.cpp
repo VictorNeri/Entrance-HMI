@@ -26,12 +26,20 @@ void wifi_manager_begin() {
   was_connected = WiFi.status() == WL_CONNECTED;
   backoff_index = 0;
   next_attempt_ms = 0;
+
+  if (was_connected) {
+    Serial.printf("[wifi] connected, ip=%s\n", WiFi.localIP().toString().c_str());
+  }
 }
 
 void wifi_manager_tick() {
   if (WiFi.status() == WL_CONNECTED) {
     if (!was_connected) {
       backoff_index = 0;  // reset backoff after a successful (re)connect
+      // IP is otherwise only visible on the physical STATUS screen —
+      // useful on serial too (e.g. targeting OTA by IP when mDNS
+      // doesn't reach across subnets).
+      Serial.printf("[wifi] connected, ip=%s\n", WiFi.localIP().toString().c_str());
     }
     was_connected = true;
     return;
