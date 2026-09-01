@@ -48,7 +48,10 @@ const CalendarEvent *find_next_event() {
 // to answer "when's my train," not duplicate the bus panel too.
 const Departure *find_next_train() {
   for (uint8_t i = 0; i < departure_list.count; i++) {
-    if (departure_list.items[i].transport_mode != "BUS") return &departure_list.items[i];
+    const Departure &dep = departure_list.items[i];
+    if (dep.transport_mode == "BUS") continue;
+    if (!transit_departure_is_reachable(dep)) continue;
+    return &dep;
   }
   return nullptr;
 }

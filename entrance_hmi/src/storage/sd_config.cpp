@@ -47,6 +47,15 @@ void sd_config_load() {
   sd_config.wifi_ssid = (const char *)(doc["wifi_ssid"] | "");
   sd_config.wifi_password = (const char *)(doc["wifi_password"] | "");
   sd_config.sl_site_id = (const char *)(doc["sl_site_id"] | "");
+  sd_config.mqtt_host = (const char *)(doc["mqtt_host"] | "");
+  sd_config.mqtt_port = (int)(doc["mqtt_port"] | 1883);
+  sd_config.mqtt_username = (const char *)(doc["mqtt_username"] | "");
+  sd_config.mqtt_password = (const char *)(doc["mqtt_password"] | "");
+  sd_config.mqtt_topic_prefix = (const char *)(doc["mqtt_topic_prefix"] | "entrance-hmi");
+  sd_config.owm_api_key = (const char *)(doc["owm_api_key"] | "");
+  sd_config.owm_lat = (const char *)(doc["owm_lat"] | "");
+  sd_config.owm_lon = (const char *)(doc["owm_lon"] | "");
+  sd_config.walk_time_min = (unsigned long)(int)(doc["walk_time_min"] | 0);
   sd_config.weather_poll_interval_ms =
       static_cast<unsigned long>((int)(doc["weather_poll_interval_sec"] | 600)) * 1000UL;
   sd_config.transit_poll_active_ms =

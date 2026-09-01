@@ -1,10 +1,14 @@
 #pragma once
 
 // Copy this file to config.h (gitignored, never committed) and fill in
-// real values. config.h holds flash-time secrets only — WiFi
-// credentials, the SL station ID, and poll/rotation intervals live on
-// the SD card instead (see README.md for the /config.json format), and
-// the Home Assistant button/entity list arrives at runtime over MQTT.
+// real values. config.h holds only what's NOT on the SD card: NTP/
+// timezone (rarely changes) and the OTA password (deliberately kept
+// off the SD card — see below). Everything else — WiFi credentials,
+// the SL station ID, MQTT broker/credentials, the OpenWeatherMap key/
+// coordinates, the walk-to-station filter, and poll/rotation intervals
+// — lives on the SD card instead (see README.md for the /config.json
+// format), and the Home Assistant button/entity list arrives at
+// runtime over MQTT.
 
 // --- Time / NTP ---
 // POSIX TZ string for Europe/Stockholm — encodes CET/CEST DST rules
@@ -13,23 +17,15 @@
 #define NTP_SERVER1 "pool.ntp.org"
 #define NTP_SERVER2 "se.pool.ntp.org"
 
-// --- Weather (OpenWeatherMap, free v2.5 "current weather" endpoint) ---
-// lat/lon preferred over city-name lookup — unambiguous and stable.
-#define OWM_API_KEY "your-openweathermap-api-key"
-#define OWM_LAT "59.3293"
-#define OWM_LON "18.0686"
-
-// --- MQTT (Home Assistant integration) ---
-#define MQTT_HOST "your-mqtt-broker-ip-or-hostname"
-#define MQTT_PORT 1883
-#define MQTT_USERNAME ""  // leave empty for anonymous/no-auth brokers
-#define MQTT_PASSWORD ""
+// --- MQTT client identity (not a secret, rarely needs tuning — the
+// broker/credentials/topic prefix are on the SD card) ---
 #define MQTT_CLIENT_ID "entrance-hmi"
-#define MQTT_TOPIC_PREFIX "entrance-hmi"
 
 // --- OTA (over-the-air firmware updates over WiFi) ---
 // Required, not optional — ArduinoOTA with an empty password lets
 // anyone on the LAN push arbitrary firmware to the device. Pick your
-// own strong value; treat it like the credentials above.
+// own strong value. Deliberately NOT on the SD card, unlike everything
+// else above: this is the credential that gates who can push new
+// firmware, so it stays off a medium anyone can pull out and read.
 #define OTA_PASSWORD "your-ota-password"
 #define OTA_HOSTNAME "entrance-hmi"

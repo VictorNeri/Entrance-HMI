@@ -19,11 +19,15 @@ bool is_bus(const Departure &dep) {
 
 // Up to MAX_SHOWN soonest departures for one bucket. Everything non-BUS
 // (METRO/TRAM/TRAIN/SHIP) buckets into the "TRAIN" panel — the simplest
-// coherent bus-vs-everything-else split.
+// coherent bus-vs-everything-else split. Departures too soon to walk to
+// (sd_config.walk_time_min) are skipped entirely, not just deprioritized.
 uint8_t find_next_n(bool bus_bucket, const Departure *out[], uint8_t max_out) {
   uint8_t n = 0;
   for (uint8_t i = 0; i < departure_list.count && n < max_out; i++) {
-    if (is_bus(departure_list.items[i]) == bus_bucket) out[n++] = &departure_list.items[i];
+    const Departure &dep = departure_list.items[i];
+    if (is_bus(dep) != bus_bucket) continue;
+    if (!transit_departure_is_reachable(dep)) continue;
+    out[n++] = &dep;
   }
   return n;
 }

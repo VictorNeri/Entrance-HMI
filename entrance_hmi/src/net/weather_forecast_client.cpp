@@ -1,7 +1,7 @@
 #include "weather_forecast_client.h"
 #include <ArduinoJson.h>
 #include <time.h>
-#include "../../config.h"
+#include "../storage/sd_config.h"
 #include "http_client_helper.h"
 #include "wifi_manager.h"
 
@@ -22,7 +22,8 @@ bool fetch_once() {
   char url[256];
   snprintf(url, sizeof(url),
            "https://api.openweathermap.org/data/2.5/forecast?lat=%s&lon=%s&units=metric&appid=%s&cnt=%u",
-           OWM_LAT, OWM_LON, OWM_API_KEY, (unsigned)MAX_FORECAST_ENTRIES);
+           sd_config.owm_lat.c_str(), sd_config.owm_lon.c_str(), sd_config.owm_api_key.c_str(),
+           (unsigned)MAX_FORECAST_ENTRIES);
 
   // Field filter: only parse what we display, same reasoning/pattern as
   // transit_client's filter.

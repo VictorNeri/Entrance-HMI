@@ -1,7 +1,10 @@
 #include "transit_client.h"
 #include <ArduinoJson.h>
+#include <stdio.h>
+#include <time.h>
 #include "../storage/sd_config.h"
 #include "http_client_helper.h"
+#include "time_sync.h"
 #include "wifi_manager.h"
 
 DepartureList departure_list;
@@ -10,20 +13,39 @@ namespace {
 
 unsigned long last_fetch_ms = 0;
 
+// SL's `expected`/`scheduled` fields are "YYYY-MM-DDTHH:MM:SS", no UTC
+// offset — local Stockholm wall-clock time, same frame as this
+// device's own NTP-synced local clock, so mktime() (which uses the
+// configured TZ) lines them up correctly without any manual offset
+// math. Returns 0 on anything that doesn't parse.
+time_t parse_sl_datetime(const char *iso) {
+  if (iso == nullptr) return 0;
+  struct tm tm_val = {};
+  int matched = sscanf(iso, "%d-%d-%dT%d:%d:%d", &tm_val.tm_year, &tm_val.tm_mon, &tm_val.tm_mday,
+                        &tm_val.tm_hour, &tm_val.tm_min, &tm_val.tm_sec);
+  if (matched != 6) return 0;
+  tm_val.tm_year -= 1900;
+  tm_val.tm_mon -= 1;
+  tm_val.tm_isdst = -1;
+  return mktime(&tm_val);
+}
+
 bool fetch_once() {
-  // forecast=10 bounds the response to the next 10 minutes. We only
-  // ever display the single soonest departure per mode, so a short
-  // window is enough — and it matters a lot more than that: at a busy
-  // interchange (verified against the live API: site 9109 returns
-  // ~30KB/57 departures at forecast=60 vs. ~11KB/20 at forecast=10),
-  // the larger response was consistently failing to fully download on
-  // device (confirmed via serial: "HTTP 200 but JSON parse failed:
-  // IncompleteInput" — the connection closes before the body finishes
-  // arriving), causing every fetch at that stop to fail outright.
+  // The forecast window has to cover at least the walk time, or the
+  // walk-time filter would hide every departure the API even returns.
+  // Scaled with a buffer so there's still something left to show after
+  // filtering, capped at 30 — the earlier size investigation (site
+  // 9109: forecast=10 -> ~11KB, forecast=30 -> ~22KB, forecast=60 ->
+  // ~30KB and consistently failed to fully download on-device) puts 30
+  // comfortably below the confirmed-failing size while still well
+  // above the confirmed-working one.
+  unsigned long forecast_min = sd_config.walk_time_min > 0 ? sd_config.walk_time_min + 15 : 10;
+  if (forecast_min > 30) forecast_min = 30;
+
   char url[160];
   snprintf(url, sizeof(url),
-           "https://transport.integration.sl.se/v1/sites/%s/departures?forecast=10",
-           sd_config.sl_site_id.c_str());
+           "https://transport.integration.sl.se/v1/sites/%s/departures?forecast=%lu",
+           sd_config.sl_site_id.c_str(), forecast_min);
 
   // Field filter: only parse what we display. Keeps peak memory
   // bounded even at a busy stop with many departures, since fields we
@@ -32,6 +54,7 @@ bool fetch_once() {
   JsonDocument filter;
   filter["departures"][0]["destination"] = true;
   filter["departures"][0]["display"] = true;
+  filter["departures"][0]["expected"] = true;
   filter["departures"][0]["line"]["designation"] = true;
   filter["departures"][0]["line"]["transport_mode"] = true;
 
@@ -56,6 +79,7 @@ bool fetch_once() {
       item.transport_mode = dep["line"]["transport_mode"].as<const char *>();
       item.destination = dep["destination"].as<const char *>();
       item.display = dep["display"].as<const char *>();
+      item.expected_epoch = parse_sl_datetime(dep["expected"].as<const char *>());
       next.count++;
     }
 
@@ -81,4 +105,16 @@ bool transit_client_fetch_now() {
   if (!wifi_is_connected()) return false;
   last_fetch_ms = millis();
   return fetch_once();
+}
+
+bool transit_departure_is_reachable(const Departure &dep) {
+  if (sd_config.walk_time_min == 0) return true;
+  if (dep.expected_epoch == 0) return true;
+
+  struct tm now_tm;
+  if (!time_sync_get_local(now_tm)) return true;
+  time_t now = mktime(&now_tm);
+
+  long minutes_until = (long)(dep.expected_epoch - now) / 60;
+  return minutes_until >= (long)sd_config.walk_time_min;
 }

@@ -6,6 +6,7 @@
 #include "../app/error_log.h"
 #include "../storage/button_config_store.h"
 #include "../storage/calendar_store.h"
+#include "../storage/sd_config.h"
 #include "wifi_manager.h"
 
 namespace {
@@ -25,7 +26,7 @@ bool ha_changed_flag = false;
 bool calendar_changed_flag = false;
 
 String topic_cmd(const String &entity_id) {
-  return String(MQTT_TOPIC_PREFIX) + "/cmd/" + entity_id;
+  return sd_config.mqtt_topic_prefix + "/cmd/" + entity_id;
 }
 
 // NOTE: doesn't unsubscribe topics belonging to entities removed by a
@@ -81,9 +82,10 @@ void on_message(char *topic, uint8_t *payload, unsigned int length) {
 }
 
 bool connect() {
-  bool ok = strlen(MQTT_USERNAME) > 0
-                ? mqtt.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD, topic_status.c_str(),
-                               0, true, "offline")
+  bool ok = sd_config.mqtt_username.length() > 0
+                ? mqtt.connect(MQTT_CLIENT_ID, sd_config.mqtt_username.c_str(),
+                               sd_config.mqtt_password.c_str(), topic_status.c_str(), 0, true,
+                               "offline")
                 : mqtt.connect(MQTT_CLIENT_ID, topic_status.c_str(), 0, true, "offline");
 
   if (ok) {
@@ -110,10 +112,10 @@ MqttTickResult mqtt_client_tick() {
   if (!wifi_is_connected()) return {};
 
   if (!topics_initialized) {
-    topic_config = String(MQTT_TOPIC_PREFIX) + "/config/buttons";
-    topic_calendar = String(MQTT_TOPIC_PREFIX) + "/config/calendar";
-    topic_status = String(MQTT_TOPIC_PREFIX) + "/status";
-    mqtt.setServer(MQTT_HOST, MQTT_PORT);
+    topic_config = sd_config.mqtt_topic_prefix + "/config/buttons";
+    topic_calendar = sd_config.mqtt_topic_prefix + "/config/calendar";
+    topic_status = sd_config.mqtt_topic_prefix + "/status";
+    mqtt.setServer(sd_config.mqtt_host.c_str(), sd_config.mqtt_port);
     // Default 256B is far too small — button-config already needed
     // 1024B, and calendar payloads (several events, each with a title
     // string) push that further. One shared buffer sized for the

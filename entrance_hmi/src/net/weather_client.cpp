@@ -1,7 +1,6 @@
 #include "weather_client.h"
 #include <ArduinoJson.h>
 #include <math.h>
-#include "../../config.h"
 #include "../storage/sd_config.h"
 #include "http_client_helper.h"
 #include "wifi_manager.h"
@@ -17,7 +16,7 @@ bool fetch_once() {
   char url[256];
   snprintf(url, sizeof(url),
            "https://api.openweathermap.org/data/2.5/weather?lat=%s&lon=%s&units=metric&appid=%s",
-           OWM_LAT, OWM_LON, OWM_API_KEY);
+           sd_config.owm_lat.c_str(), sd_config.owm_lon.c_str(), sd_config.owm_api_key.c_str());
 
   JsonDocument doc;
   bool ok = http_get_json(url, doc, 8000, nullptr, "weather");
