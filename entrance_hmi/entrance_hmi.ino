@@ -45,8 +45,8 @@ void loop() {
   static unsigned long last_heartbeat_ms = 0;
   if (millis() - last_heartbeat_ms >= 60UL * 1000) {
     last_heartbeat_ms = millis();
-    Serial.printf("[heartbeat] up=%lums wifi=%d heap=%u\n", millis(), wifi_is_connected(),
-                  (unsigned)ESP.getFreeHeap());
+    Serial.printf("[heartbeat] up=%lums wifi=%d rssi=%d heap=%u\n", millis(), wifi_is_connected(),
+                  wifi_get_rssi(), (unsigned)ESP.getFreeHeap());
   }
 
   wifi_manager_tick();

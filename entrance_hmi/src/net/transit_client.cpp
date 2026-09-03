@@ -66,6 +66,15 @@ bool fetch_once() {
   // second — confirmed by direct testing against the live SL API.
   JsonDocument doc;
   bool ok = http_get_json(url, doc, 15000, &filter, "transit");
+  if (!ok) {
+    // Observed on-device: HTTP 200 but a truncated body (IncompleteInput)
+    // even with strong WiFi signal and plenty of free heap — a one-off
+    // blip on the connection to SL, not a resource limit. Retry once
+    // immediately rather than leaving stale data on screen for a full
+    // poll interval.
+    doc.clear();
+    ok = http_get_json(url, doc, 15000, &filter, "transit");
+  }
 
   if (ok) {
     DepartureList next;

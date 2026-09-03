@@ -11,3 +11,8 @@ void wifi_manager_begin();
 void wifi_manager_tick();
 
 bool wifi_is_connected();
+
+// Signal strength in dBm (typically -30 to -90; less negative is
+// stronger). Returns 0 when not connected — WiFi.RSSI()'s value is
+// meaningless without an active association.
+int wifi_get_rssi();

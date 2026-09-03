@@ -60,3 +60,7 @@ void wifi_manager_tick() {
 bool wifi_is_connected() {
   return WiFi.status() == WL_CONNECTED;
 }
+
+int wifi_get_rssi() {
+  return WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
+}
