@@ -73,6 +73,21 @@ void loop() {
     ui_render_current_screen(true);
   }
 
+  // MQTT serviced before the blocking HTTPS ticks below (weather,
+  // forecast, and transit are each bounded at 8s, and can add up to
+  // more than the MQTT keepalive window if several are due the same
+  // iteration) — mqtt.loop() needs a timely, regular call to send its
+  // own keepalive pings, or the broker disconnects it for "exceeded
+  // timeout" even though the connection itself is healthy.
+  MqttTickResult mqtt_tick = mqtt_client_tick();
+  bool ha_updated_visible = mqtt_tick.ha_changed && app_state.current_screen == Screen::HA_CONTROL;
+  // Calendar changes redraw regardless of visible screen — the header's
+  // pending-events indicator is present on every screen, unlike
+  // HA_CONTROL's list which only matters while that screen is shown.
+  if (ha_updated_visible || mqtt_tick.calendar_changed) {
+    ui_render_current_screen(false);
+  }
+
   bool weather_on_screen = app_state.current_screen == Screen::WEATHER;
   bool weather_updated_visible = weather_client_tick() && weather_on_screen;
   bool forecast_updated_visible = weather_forecast_client_tick() && weather_on_screen;
@@ -85,15 +100,6 @@ void loop() {
       transit_on_screen ? sd_config.transit_poll_active_ms : sd_config.transit_poll_background_ms;
   bool transit_updated_visible = transit_client_tick(transit_poll_interval_ms) && transit_on_screen;
   if (transit_updated_visible) {
-    ui_render_current_screen(false);
-  }
-
-  MqttTickResult mqtt_tick = mqtt_client_tick();
-  bool ha_updated_visible = mqtt_tick.ha_changed && app_state.current_screen == Screen::HA_CONTROL;
-  // Calendar changes redraw regardless of visible screen — the header's
-  // pending-events indicator is present on every screen, unlike
-  // HA_CONTROL's list which only matters while that screen is shown.
-  if (ha_updated_visible || mqtt_tick.calendar_changed) {
     ui_render_current_screen(false);
   }
 

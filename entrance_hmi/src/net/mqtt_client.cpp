@@ -121,6 +121,14 @@ MqttTickResult mqtt_client_tick() {
     // string) push that further. One shared buffer sized for the
     // worst case across both payload types.
     mqtt.setBufferSize(3072);
+    // PubSubClient's default (15s) is tight for this loop: weather,
+    // forecast, and transit fetches are each bounded at 8s and run
+    // ahead of nothing now (mqtt_client_tick() is serviced first in
+    // entrance_hmi.ino), but an EPD full refresh or a slow fetch that
+    // still lands mid-cycle can eat into a 15s budget fast. Confirmed
+    // via the broker's own log: real disconnects logged as "exceeded
+    // timeout" despite the client otherwise being healthy.
+    mqtt.setKeepAlive(60);
     mqtt.setCallback(on_message);
     topics_initialized = true;
   }
