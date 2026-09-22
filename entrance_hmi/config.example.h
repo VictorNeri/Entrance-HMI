@@ -29,3 +29,15 @@
 // firmware, so it stays off a medium anyone can pull out and read.
 #define OTA_PASSWORD "your-ota-password"
 #define OTA_HOSTNAME "entrance-hmi"
+
+// --- Network debug log (TCP "serial bridge") ---
+// Mirrors everything the firmware writes via Serial.print/println/
+// printf out over a plain TCP socket too, so you can watch debug
+// output without physical USB access once the panel is mounted.
+// Connect with `nc <device-ip> <NET_LOG_PORT>` or any telnet client.
+// Not authenticated — anyone who can reach the device on the LAN can
+// connect and read it. It's read-only (unlike OTA_PASSWORD, which
+// gates writing new firmware), so the risk is exposure of debug
+// output, not device control — change the port, or don't expose this
+// device's network to anyone you don't trust, if that's a concern.
+#define NET_LOG_PORT 23

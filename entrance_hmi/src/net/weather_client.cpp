@@ -4,6 +4,7 @@
 #include "../storage/sd_config.h"
 #include "http_client_helper.h"
 #include "wifi_manager.h"
+#include "net_log_shadow.h"
 
 WeatherData weather_data;
 

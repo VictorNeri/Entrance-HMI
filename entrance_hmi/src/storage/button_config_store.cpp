@@ -1,6 +1,7 @@
 #include "button_config_store.h"
 #include <ArduinoJson.h>
 #include <LittleFS.h>
+#include "../net/net_log_shadow.h"
 
 HaEntityList ha_entity_list;
 

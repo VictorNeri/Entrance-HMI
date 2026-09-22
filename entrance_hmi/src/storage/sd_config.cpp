@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include <SD.h>
 #include <SPI.h>
+#include "../net/net_log_shadow.h"
 
 SdConfig sd_config;
 

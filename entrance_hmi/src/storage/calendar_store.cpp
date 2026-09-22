@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include <LittleFS.h>
 #include "../net/time_sync.h"
+#include "../net/net_log_shadow.h"
 
 CalendarEventList calendar_event_list;
 

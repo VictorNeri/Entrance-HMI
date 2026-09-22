@@ -4,10 +4,13 @@
 #include <stdio.h>
 #include "../../config.h"
 #include "../app/error_log.h"
+#include "../storage/broadcast_store.h"
 #include "../storage/button_config_store.h"
 #include "../storage/calendar_store.h"
 #include "../storage/sd_config.h"
+#include "time_sync.h"
 #include "wifi_manager.h"
+#include "net_log_shadow.h"
 
 namespace {
 
@@ -16,6 +19,8 @@ PubSubClient mqtt(net_client);
 
 String topic_config;
 String topic_calendar;
+String topic_broadcast;
+String topic_broadcast_ack;
 String topic_status;
 bool topics_initialized = false;
 
@@ -24,6 +29,7 @@ constexpr unsigned long RECONNECT_INTERVAL_MS = 5000;
 
 bool ha_changed_flag = false;
 bool calendar_changed_flag = false;
+bool broadcast_changed_flag = false;
 
 String topic_cmd(const String &entity_id) {
   return sd_config.mqtt_topic_prefix + "/cmd/" + entity_id;
@@ -60,6 +66,13 @@ void on_message(char *topic, uint8_t *payload, unsigned int length) {
     return;
   }
 
+  if (topic_str == topic_broadcast) {
+    if (broadcast_store_apply_payload(reinterpret_cast<const char *>(payload), length)) {
+      broadcast_changed_flag = true;
+    }
+    return;
+  }
+
   // HA's mqtt_statestream integration typically publishes the raw
   // state string ("on"/"off") as the payload body.
   for (uint8_t i = 0; i < ha_entity_list.count; i++) {
@@ -92,6 +105,7 @@ bool connect() {
     mqtt.publish(topic_status.c_str(), "online", true);
     mqtt.subscribe(topic_config.c_str());
     mqtt.subscribe(topic_calendar.c_str());
+    mqtt.subscribe(topic_broadcast.c_str());
     resubscribe_state_topics();
     Serial.println("[mqtt] connected");
   } else {
@@ -114,12 +128,15 @@ MqttTickResult mqtt_client_tick() {
   if (!topics_initialized) {
     topic_config = sd_config.mqtt_topic_prefix + "/config/buttons";
     topic_calendar = sd_config.mqtt_topic_prefix + "/config/calendar";
+    topic_broadcast = sd_config.mqtt_topic_prefix + "/broadcast/message";
+    topic_broadcast_ack = sd_config.mqtt_topic_prefix + "/broadcast/ack";
     topic_status = sd_config.mqtt_topic_prefix + "/status";
     mqtt.setServer(sd_config.mqtt_host.c_str(), sd_config.mqtt_port);
     // Default 256B is far too small — button-config already needed
     // 1024B, and calendar payloads (several events, each with a title
     // string) push that further. One shared buffer sized for the
-    // worst case across both payload types.
+    // worst case across all incoming payload types (broadcast messages
+    // are capped well under this at BROADCAST_TEXT_MAX).
     mqtt.setBufferSize(3072);
     // PubSubClient's default (15s) is tight for this loop: weather,
     // forecast, and transit fetches are each bounded at 8s and run
@@ -143,8 +160,9 @@ MqttTickResult mqtt_client_tick() {
 
   ha_changed_flag = false;
   calendar_changed_flag = false;
+  broadcast_changed_flag = false;
   mqtt.loop();
-  return {ha_changed_flag, calendar_changed_flag};
+  return {ha_changed_flag, calendar_changed_flag, broadcast_changed_flag};
 }
 
 void mqtt_client_publish_toggle(const String &entity_id) {
@@ -154,4 +172,23 @@ void mqtt_client_publish_toggle(const String &entity_id) {
 
 bool mqtt_is_connected() {
   return mqtt.connected();
+}
+
+void mqtt_client_acknowledge_broadcast() {
+  String id = broadcast_message.id;  // capture before broadcast_store_acknowledge() clears it
+  broadcast_store_acknowledge();
+
+  if (!mqtt.connected()) return;
+
+  long acked_at = 0;
+  struct tm t;
+  if (time_sync_get_local(t)) acked_at = (long)mktime(&t);
+
+  // snprintf itself can't overflow this (it truncates), but sized with
+  // real headroom: BROADCAST_ID_MAX (47) + MQTT_CLIENT_ID + the JSON
+  // punctuation comfortably fits, so a max-length id is never cut off.
+  char payload[160];
+  snprintf(payload, sizeof(payload), "{\"id\":\"%s\",\"client_id\":\"%s\",\"acked_at\":%ld}",
+           id.c_str(), MQTT_CLIENT_ID, acked_at);
+  mqtt.publish(topic_broadcast_ack.c_str(), payload);
 }

@@ -2,6 +2,8 @@
 #include "../app/app_state.h"
 #include "../epd_driver/EPD.h"
 #include "../epd_driver/EPD_Init.h"
+#include "../storage/broadcast_store.h"
+#include "screen_broadcast.h"
 #include "screen_ha_control.h"
 #include "screen_home.h"
 #include "screen_status.h"
@@ -57,6 +59,13 @@ void ui_render_current_screen(bool force_full_refresh) {
   // Drawn on top of whatever the screen painted, so chrome always wins
   // at its own regions regardless of any screen miscalculation.
   ui_chrome_render();
+
+  // Drawn last, on top of chrome too — an unacknowledged broadcast
+  // message is a full-canvas modal that takes over the whole display
+  // until acknowledged (see screen_broadcast.h / broadcast_store.h).
+  if (broadcast_store_has_pending()) {
+    screen_broadcast_render_overlay();
+  }
 
   // Upgrade to a full refresh if one is due regardless of what the
   // caller asked for (ghosting hygiene) — piggybacking on a render

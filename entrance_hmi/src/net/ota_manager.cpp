@@ -4,6 +4,7 @@
 #include "../../config.h"
 #include "../app/error_log.h"
 #include "wifi_manager.h"
+#include "net_log_shadow.h"
 
 namespace {
 

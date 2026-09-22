@@ -9,6 +9,10 @@ struct MqttTickResult {
   // of which screen is visible, since the header's pending-events
   // indicator is present on every screen.
   bool calendar_changed = false;
+  // A new broadcast message arrived (or superseded an unacknowledged
+  // one) — caller should force a FULL redraw regardless of current
+  // screen, since the modal covers the whole canvas.
+  bool broadcast_changed = false;
 };
 
 // Call every loop() iteration. No-op while WiFi is down; otherwise
@@ -23,3 +27,12 @@ void mqtt_client_publish_toggle(const String &entity_id);
 
 // For the header's connection indicator.
 bool mqtt_is_connected();
+
+// Called by the main loop when the user acknowledges the currently
+// pending broadcast message (OK button while screen_broadcast's modal
+// is showing). Always clears broadcast_store's pending state locally
+// first — regardless of connection state, so a WiFi hiccup can't trap
+// someone in front of the panel behind an unacknowledgeable modal —
+// then, only if currently connected, publishes an ack to
+// <prefix>/broadcast/ack so whoever sent it knows it was seen.
+void mqtt_client_acknowledge_broadcast();
