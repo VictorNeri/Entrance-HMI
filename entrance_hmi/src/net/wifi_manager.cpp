@@ -1,6 +1,7 @@
 #include "wifi_manager.h"
 #include <WiFi.h>
 #include "../storage/sd_config.h"
+#include "net_log_shadow.h"
 
 namespace {
 

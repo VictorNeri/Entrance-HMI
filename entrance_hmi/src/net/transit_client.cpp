@@ -6,6 +6,7 @@
 #include "http_client_helper.h"
 #include "time_sync.h"
 #include "wifi_manager.h"
+#include "net_log_shadow.h"
 
 DepartureList departure_list;
 

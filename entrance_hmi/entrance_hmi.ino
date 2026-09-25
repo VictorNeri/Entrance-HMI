@@ -10,11 +10,13 @@
 #include "src/net/weather_client.h"
 #include "src/net/weather_forecast_client.h"
 #include "src/net/wifi_manager.h"
+#include "src/storage/broadcast_store.h"
 #include "src/storage/button_config_store.h"
 #include "src/storage/calendar_store.h"
 #include "src/storage/littlefs_setup.h"
 #include "src/storage/sd_config.h"
 #include "src/ui/ui_common.h"
+#include "src/net/net_log_shadow.h"
 
 void setup() {
   Serial.begin(115200);
@@ -32,6 +34,9 @@ void setup() {
   button_config_store_load_from_disk();
   // Same reasoning for the header's pending-events indicator.
   calendar_store_load_from_disk();
+  // Same reasoning again — an important message that arrived just
+  // before a reboot/power loss shouldn't be silently lost.
+  broadcast_store_load_from_disk();
 
   wifi_manager_begin();
   ui_render_current_screen(true);
@@ -52,6 +57,7 @@ void loop() {
   wifi_manager_tick();
   ota_manager_tick();
   time_sync_tick();
+  net_log_tick();
 
   // Header clock: redraw (partial) whenever the local minute changes.
   // Per-second is off the table (full-buffer repaint + e-paper refresh
@@ -87,6 +93,12 @@ void loop() {
   if (ha_updated_visible || mqtt_tick.calendar_changed) {
     ui_render_current_screen(false);
   }
+  // A broadcast message is a full-canvas modal — always force a FULL
+  // refresh so its border/text render cleanly regardless of whatever
+  // partial-refresh state the panel was left in.
+  if (mqtt_tick.broadcast_changed) {
+    ui_render_current_screen(true);
+  }
 
   bool weather_on_screen = app_state.current_screen == Screen::WEATHER;
   bool weather_updated_visible = weather_client_tick() && weather_on_screen;
@@ -120,6 +132,18 @@ void loop() {
   ButtonEvent event = buttons_poll();
   if (event.button != Button::NONE) {
     app_state_mark_manual_interaction();
+  }
+
+  // An unacknowledged broadcast message is a modal — it absorbs every
+  // button until OK dismisses it, so none of the normal per-screen OK
+  // handling or nav_handle_event() below ever sees these events while
+  // it's showing.
+  if (broadcast_store_has_pending()) {
+    if (event.button == Button::OK) {
+      mqtt_client_acknowledge_broadcast();
+      ui_render_current_screen(true);
+    }
+    return;
   }
 
   if (event.button == Button::OK) {

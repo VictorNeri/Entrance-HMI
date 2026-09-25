@@ -1,6 +1,7 @@
 #include "littlefs_setup.h"
 #include <Arduino.h>
 #include <LittleFS.h>
+#include "../net/net_log_shadow.h"
 
 bool littlefs_setup_begin() {
   if (LittleFS.begin(false)) return true;

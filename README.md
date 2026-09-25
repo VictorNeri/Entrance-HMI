@@ -72,3 +72,55 @@ SD card wiring (separate SPI bus from the e-paper panel, no pin conflicts):
 |---|---|
 | SD SCK / MISO / MOSI / CS | 39 / 13 / 40 / 10 |
 | SD card power enable | 42 |
+
+## MQTT topics
+
+All topics are prefixed with `mqtt_topic_prefix` from `/config.json` (default `entrance-hmi`). This was previously undocumented outside the source itself — worth double-checking the exact topic string against what your Home Assistant automation/script actually publishes to, since a silent prefix or path mismatch means the message is simply never seen (no error on either side).
+
+**`<prefix>/config/buttons`** (subscribe) — the Home Assistant control screen's button list, replaces the whole list on receipt:
+```json
+{
+  "entities": [
+    {"id": "light.entryway", "label": "Entry Light", "icon": "bulb", "action": "toggle", "state_topic": "homeassistant/light/entryway/state"}
+  ]
+}
+```
+`id` is required; `label` defaults to `id`, `icon` to `"generic"`, `action` to `"toggle"` (the only action currently handled), `state_topic` to `""` (entity shows as unknown state if omitted). Up to 10 entities.
+
+**`<prefix>/config/calendar`** (subscribe) — upcoming events, replaces the whole list on receipt, feeds the header's pending-events count (not a full events screen yet):
+```json
+{
+  "version": 1,
+  "events": [
+    {"title": "Dentist", "start": 1735689600, "end": 1735693200}
+  ]
+}
+```
+`start` is required, Unix epoch **seconds** (not milliseconds, not an ISO string — a common mismatch when driving this from a Home Assistant calendar trigger, whose own `start`/`end` are ISO strings and need converting). `end` is optional, `0` means point-in-time. Up to 16 events.
+
+**`<prefix>/broadcast/message`** (subscribe) — an important one-off message shown as a full-screen modal until acknowledged on the device (OK button):
+```json
+{"id": "maint-2026-09-22", "text": "Water shutoff 10:00-12:00 today", "level": "warning"}
+```
+`id` and `text` are required. `level` is `"info"` | `"warning"` | `"urgent"` (defaults to `"info"`; an unrecognized value also falls back to `"info"`) and only changes the modal's title word — there's no color on a black/white panel. A new message replaces any currently-unacknowledged one (newest wins, not a queue). The message persists across a reboot until acknowledged, so it isn't lost to a power blip.
+
+**`<prefix>/broadcast/ack`** (publish, from the device) — sent once, when OK is pressed on the modal:
+```json
+{"id": "maint-2026-09-22", "client_id": "entrance-hmi", "acked_at": 1758528000}
+```
+`acked_at` is `0` if the device's clock hasn't synced via NTP yet. Not retained. The on-screen dismissal happens regardless of whether this publish succeeds (a disconnected device still lets you clear the modal locally) — treat a missing ack as "maybe not acknowledged," not as proof it wasn't.
+
+**`<prefix>/status`** (publish, retained, LWT) — `"online"` while connected, `"offline"` if the device drops off ungracefully.
+
+**`<prefix>/cmd/<entity_id>`** (publish, from the device) — `"toggle"`, sent when OK is pressed on a HA_CONTROL entity with `"action": "toggle"`.
+
+## Network debug log
+
+Every `Serial.print`/`println`/`printf` call also streams over a plain TCP socket (`NET_LOG_PORT` in `config.h`, default `23`), so debug output is visible without physical USB access once the panel is mounted somewhere inconvenient to reach:
+
+```bash
+nc <device-ip> 23
+# or: telnet <device-ip> 23
+```
+
+Starts automatically once WiFi connects (mirrors the OTA manager's own lazy-start pattern). Single client at a time — a new connection replaces whatever was there before. Not authenticated: it's read-only (unlike `OTA_PASSWORD`, which gates writing new firmware), so the exposure is debug output, not device control, but anyone who can reach the device on the LAN can read it. Change the port, or don't expose the device's network to anyone untrusted, if that matters for your setup.

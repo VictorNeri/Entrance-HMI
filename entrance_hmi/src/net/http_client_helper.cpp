@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <WiFiClientSecure.h>
 #include "../app/error_log.h"
+#include "net_log_shadow.h"
 
 bool http_get_json(const char *url, JsonDocument &doc, uint16_t timeout_ms,
                     const JsonDocument *filter, const char *context) {
