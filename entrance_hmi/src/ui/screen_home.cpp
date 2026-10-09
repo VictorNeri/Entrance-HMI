@@ -1,5 +1,6 @@
 #include "screen_home.h"
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 #include "../epd_driver/EPD.h"
 #include "../epd_driver/EPD_Init.h"
@@ -65,22 +66,35 @@ void render_weather_column() {
     return;
   }
 
-  draw_weather_icon(COL1_X + 18, UI_CONTENT_BODY_TOP + 55, weather_data.icon);
+  // Icon as big as this column comfortably fits, centered (not
+  // alongside the temperature the way WEATHER's "NOW" column does it)
+  // so it reads as the dominant element on a quick-glance screen.
+  // 2.0x the base ~28px icon is the largest scale that still leaves
+  // the temp/description lines below it inside the content area —
+  // checked against the tallest shape (thunderstorm's bolt reaches
+  // further down than a plain cloud or sun).
+  constexpr uint16_t ICON_CENTER_X = COL1_X + UI_COL_W / 2;
+  constexpr uint16_t ICON_CENTER_Y = UI_CONTENT_BODY_TOP + 58;
+  constexpr float ICON_SCALE = 2.0f;
+  draw_weather_icon(ICON_CENTER_X, ICON_CENTER_Y, weather_data.icon, ICON_SCALE);
 
-  char line[48];
+  // Humidity dropped from this column (still shown on the dedicated
+  // WEATHER screen) — the room it used to take is what makes the
+  // bigger icon above fit.
+  char line[16];
   snprintf(line, sizeof(line), "%.0f C", weather_data.temp_c);
-  EPD_ShowString(COL1_X + 44, UI_CONTENT_BODY_TOP + 32, line, 48, BLACK);
+  uint16_t temp_w = strlen(line) * 24;  // size-48 glyph advance = size/2 = 24px/char
+  uint16_t temp_x = temp_w / 2 < ICON_CENTER_X ? ICON_CENTER_X - temp_w / 2 : COL1_X;
+  EPD_ShowString(temp_x, UI_CONTENT_BODY_TOP + 102, line, 48, BLACK);
 
   // OWM's description text is normally short ("clear sky") but some
-  // are longer ("light intensity drizzle" is a real one) — at size 24
-  // this column is only ~18 chars wide, so cap it rather than let it
-  // run into the next column.
+  // are longer ("light intensity drizzle" is a real one) — cap
+  // defensively, same reasoning as the other columns.
   char desc[19];
   snprintf(desc, sizeof(desc), "%s", weather_data.description.c_str());
-  EPD_ShowString(COL1_X, UI_CONTENT_BODY_TOP + 88, desc, 24, BLACK);
-
-  snprintf(line, sizeof(line), "Humidity: %d%%", weather_data.humidity);
-  EPD_ShowString(COL1_X, UI_CONTENT_BODY_TOP + 120, line, 24, BLACK);
+  uint16_t desc_w = strlen(desc) * 12;  // size-24 glyph advance = size/2 = 12px/char
+  uint16_t desc_x = desc_w / 2 < ICON_CENTER_X ? ICON_CENTER_X - desc_w / 2 : COL1_X;
+  EPD_ShowString(desc_x, UI_CONTENT_BODY_TOP + 152, desc, 24, BLACK);
 }
 
 void render_event_column() {

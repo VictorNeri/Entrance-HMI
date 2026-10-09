@@ -6,11 +6,11 @@
 AppState app_state;
 
 const ScreenInfo SCREEN_TABLE[] = {
-    {Screen::HOME, "HOME", true, true},
-    {Screen::WEATHER, "WEATHER", true, true},
-    {Screen::TRANSIT, "TRANSIT", true, true},
-    {Screen::HA_CONTROL, "HA CTRL", true, false},
-    {Screen::STATUS, "STATUS", false, false},
+    {Screen::WEATHER, "WEATHER", true},
+    {Screen::HOME, "HOME", true},
+    {Screen::TRANSIT, "TRANSIT", true},
+    {Screen::HA_CONTROL, "HA CTRL", true},
+    {Screen::STATUS, "STATUS", true},
 };
 const size_t SCREEN_TABLE_LEN = sizeof(SCREEN_TABLE) / sizeof(SCREEN_TABLE[0]);
 
@@ -64,38 +64,8 @@ void app_state_mark_manual_interaction() {
   app_state.last_manual_interaction_ms = millis();
 }
 
-namespace {
-bool is_in_rotation_ring(Screen screen) {
-  for (size_t i = 0; i < SCREEN_TABLE_LEN; i++) {
-    if (SCREEN_TABLE[i].screen == screen) return SCREEN_TABLE[i].in_rotation_ring;
-  }
-  return false;
-}
-}  // namespace
-
-bool app_state_should_auto_rotate() {
-  if (!is_in_rotation_ring(app_state.current_screen)) return false;
-
+bool app_state_should_return_home() {
+  if (app_state.current_screen == Screen::HOME) return false;
   unsigned long now = millis();
-  if (now - app_state.last_manual_interaction_ms < sd_config.screen_rotation_interval_ms) return false;
-  if (now - app_state.last_auto_rotation_ms < sd_config.screen_rotation_interval_ms) return false;
-  return true;
-}
-
-Screen app_state_next_rotation_screen() {
-  // Index within the filtered rotation-ring subset of SCREEN_TABLE.
-  size_t rotation_indices[SCREEN_TABLE_LEN];
-  size_t rotation_len = 0;
-  size_t current_idx = 0;
-  for (size_t i = 0; i < SCREEN_TABLE_LEN; i++) {
-    if (!SCREEN_TABLE[i].in_rotation_ring) continue;
-    if (SCREEN_TABLE[i].screen == app_state.current_screen) current_idx = rotation_len;
-    rotation_indices[rotation_len++] = i;
-  }
-  if (rotation_len == 0) return app_state.current_screen;
-  return SCREEN_TABLE[rotation_indices[(current_idx + 1) % rotation_len]].screen;
-}
-
-void app_state_mark_auto_rotated() {
-  app_state.last_auto_rotation_ms = millis();
+  return now - app_state.last_manual_interaction_ms >= sd_config.screen_rotation_interval_ms;
 }

@@ -64,7 +64,7 @@ void sd_config_load() {
   sd_config.transit_poll_background_ms =
       static_cast<unsigned long>((int)(doc["transit_poll_background_sec"] | 300)) * 1000UL;
   sd_config.screen_rotation_interval_ms =
-      static_cast<unsigned long>((int)(doc["screen_rotation_interval_sec"] | 300)) * 1000UL;
+      static_cast<unsigned long>((int)(doc["screen_rotation_interval_sec"] | 12)) * 1000UL;
   sd_config.loaded_from_sd = true;
 
   Serial.printf("[sd-config] loaded: ssid=%s site=%s\n", sd_config.wifi_ssid.c_str(),
