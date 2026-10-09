@@ -21,7 +21,12 @@ struct SdConfig {
   unsigned long weather_poll_interval_ms = 10UL * 60 * 1000;   // defaults match the
   unsigned long transit_poll_active_ms = 90UL * 1000;          // hardcoded constants
   unsigned long transit_poll_background_ms = 300UL * 1000;     // used verbatim if the
-  unsigned long screen_rotation_interval_ms = 300UL * 1000;    // SD card/file is missing/invalid
+  // How long idle (no button press) on any screen other than HOME
+  // before auto-returning to HOME. Kept the same field name/JSON key
+  // across the behavior change below — it's still "how long idle
+  // before something automatic happens," just home-return instead of
+  // cycling through screens.
+  unsigned long screen_rotation_interval_ms = 12UL * 1000;      // SD card/file is missing/invalid
   bool loaded_from_sd = false;
 };
 

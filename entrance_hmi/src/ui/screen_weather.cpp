@@ -1,5 +1,6 @@
 #include "screen_weather.h"
 #include <stdio.h>
+#include <string.h>
 #include "../epd_driver/EPD.h"
 #include "../epd_driver/EPD_Init.h"
 #include "../net/weather_client.h"
@@ -38,7 +39,13 @@ void render_current_column() {
   EPD_ShowString(UI_COL1_X, UI_CONTENT_BODY_TOP + 120, line, 24, BLACK);
 }
 
-void render_hourly_column() {
+// Temperature-over-the-day line chart, replacing the old 3-row icon+
+// text list (which only ever showed 3 of the then-4 fetched entries
+// anyway) — this uses however many entries actually came back
+// (MAX_FORECAST_ENTRIES, currently 8 at OWM's 3-hourly cadence =~24h),
+// spaced evenly across the column regardless of count so it still
+// looks reasonable if a fetch came back short.
+void render_hourly_chart() {
   EPD_ShowString(UI_COL2_X, UI_CONTENT_BODY_TOP, "NEXT HOURS", 24, BLACK);
 
   if (!forecast_data.valid || forecast_data.count == 0) {
@@ -47,17 +54,51 @@ void render_hourly_column() {
     return;
   }
 
-  // 3 rows, not the 4 fetched — leaves a safe margin above the hint
-  // line at the bigger font size (verified: 4 rows left only ~4px
-  // clearance, too tight given how EPD_ShowChar has zero bounds
-  // checking and a miscalculation here previously caused a real crash).
-  for (uint8_t i = 0; i < forecast_data.count && i < 3; i++) {
-    uint16_t row_y = UI_CONTENT_BODY_TOP + 34 + i * 36;
-    const ForecastEntry &entry = forecast_data.items[i];
-    draw_weather_icon_mini(UI_COL2_X + 8, row_y + 8, entry.icon);
-    char line[24];
-    snprintf(line, sizeof(line), "%02d:00  %.0fC", entry.hour, entry.temp_c);
-    EPD_ShowString(UI_COL2_X + 22, row_y, line, 16, BLACK);
+  uint8_t count = forecast_data.count;
+  float min_t = forecast_data.items[0].temp_c, max_t = forecast_data.items[0].temp_c;
+  for (uint8_t i = 1; i < count; i++) {
+    float t = forecast_data.items[i].temp_c;
+    if (t < min_t) min_t = t;
+    if (t > max_t) max_t = t;
+  }
+
+  // High/low called out in their own fixed-position row rather than
+  // pinned next to their points on the chart — a label pinned to
+  // whichever point happens to be the extreme risks colliding with the
+  // header above or the hour-label row below depending on where that
+  // point lands, which varies with live data. A fixed row never does.
+  char hilo[32];
+  snprintf(hilo, sizeof(hilo), "High %.0fC  Low %.0fC", max_t, min_t);
+  EPD_ShowString(UI_COL2_X, UI_CONTENT_BODY_TOP + 28, hilo, 16, BLACK);
+
+  constexpr uint16_t CHART_TOP = UI_CONTENT_BODY_TOP + 48;
+  constexpr uint16_t CHART_HEIGHT = 80;
+  constexpr uint16_t CHART_RIGHT_MARGIN = 8;  // clear of the column divider
+  uint16_t available_w = (UI_COL_DIVIDER2_X - CHART_RIGHT_MARGIN) - UI_COL2_X;
+  uint16_t pitch = count > 1 ? available_w / (count - 1) : 0;
+  float range = (max_t - min_t) > 1.0f ? (max_t - min_t) : 1.0f;  // avoid a divide-by-zero flat line
+
+  uint16_t xs[MAX_FORECAST_ENTRIES], ys[MAX_FORECAST_ENTRIES];
+  for (uint8_t i = 0; i < count; i++) {
+    xs[i] = UI_COL2_X + i * pitch;
+    ys[i] = CHART_TOP + (uint16_t)((max_t - forecast_data.items[i].temp_c) / range * CHART_HEIGHT);
+    if (i > 0) EPD_DrawLine(xs[i - 1], ys[i - 1], xs[i], ys[i], BLACK);
+  }
+  for (uint8_t i = 0; i < count; i++) {
+    EPD_DrawCircle(xs[i], ys[i], 2, BLACK, 1);
+  }
+
+  // Every point gets an hour label when there's room for it; thin out
+  // to every other one once there are enough points that they'd
+  // otherwise crowd into each other (checked against this font's
+  // 8px/char advance at the pitch 8 entries actually produces).
+  uint8_t label_step = count > 6 ? 2 : 1;
+  for (uint8_t i = 0; i < count; i += label_step) {
+    char label[6];
+    snprintf(label, sizeof(label), "%02dh", forecast_data.items[i].hour);
+    uint16_t label_w = strlen(label) * 8;  // size-16 glyph advance = size/2 = 8px/char
+    uint16_t label_x = xs[i] > label_w / 2 ? xs[i] - label_w / 2 : UI_COL2_X;
+    EPD_ShowString(label_x, CHART_TOP + CHART_HEIGHT + 6, label, 16, BLACK);
   }
 }
 
@@ -113,7 +154,7 @@ void screen_weather_render() {
   EPD_DrawLine(UI_COL_DIVIDER2_X, UI_CONTENT_BODY_TOP, UI_COL_DIVIDER2_X, UI_CONTENT_BOTTOM, BLACK);
 
   render_current_column();
-  render_hourly_column();
+  render_hourly_chart();
   render_alerts_column();
 
   EPD_ShowString(UI_CONTENT_LEFT, UI_CONTENT_HINT_Y, "OK: refresh now", 16, BLACK);

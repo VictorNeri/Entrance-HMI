@@ -14,6 +14,19 @@ Everything under [`vendor-reference/`](vendor-reference/) is the original, unmod
 - 5.79" black/white e-paper, dual SSD1683 driver, 792×272 visible resolution
 - 5 physical buttons (HOME/EXIT/PRV/NEXT/OK), no touch input
 
+## Navigation
+
+Screens are arranged in a ring with HOME at the center, so PRV/NEXT read as "up" and "down" from wherever you land:
+
+```
+WEATHER — HOME — TRANSIT — HA CONTROL — STATUS
+  (PRV ←)         (→ NEXT, → NEXT again, → NEXT again)
+```
+
+PRV from HOME goes up to WEATHER; NEXT goes down to TRANSIT, then HA_CONTROL, then STATUS (wrapping back to WEATHER past the end). HOME (short press) or EXIT jumps straight to HOME from anywhere; HOME (long press) jumps straight to STATUS.
+
+Idle on any screen other than HOME for `screen_rotation_interval_sec` (default 12s, see `/config.json` below) and it auto-returns to HOME, which then just sits there updating on its own until the next button press — it doesn't keep auto-cycling through other screens.
+
 ## Build
 
 Board: `esp32:esp32:esp32s3`. **Set these board options before compiling/flashing** — the ESP32 Arduino core's default board options target a 4MB-flash variant, not this board's real 8MB flash + 8MB PSRAM, and building against the default 1.2MB APP partition runs out of headroom well before this firmware is done growing:
@@ -53,7 +66,7 @@ Two layers, deliberately split by how often each one changes and how sensitive i
   "weather_poll_interval_sec": 600,
   "transit_poll_active_sec": 90,
   "transit_poll_background_sec": 300,
-  "screen_rotation_interval_sec": 300
+  "screen_rotation_interval_sec": 12
 }
 ```
 
@@ -62,7 +75,7 @@ Two layers, deliberately split by how often each one changes and how sensitive i
 - `owm_api_key`/`owm_lat`/`owm_lon`: your OpenWeatherMap API key and coordinates (lat/lon preferred over city-name lookup — unambiguous and stable).
 - `walk_time_min`: minutes to walk from home to the station. Departures sooner than this are hidden on HOME/TRANSIT entirely, since you can't catch them — `0` (the default) turns the filter off and shows everything fetched. Set it to your real walk time once you know it; there's no way for the firmware to guess it. Internally this also widens the SL fetch window to `walk_time_min + 15` minutes (capped at 30, to stay within a payload size already confirmed safe on this device) so there's still something left to show after filtering.
 - `weather_poll_interval_sec` / `transit_poll_active_sec` / `transit_poll_background_sec`: how often the WEATHER screen refetches, and how often TRANSIT refetches while visible vs. in the background.
-- `screen_rotation_interval_sec`: how often HOME/WEATHER/TRANSIT auto-advance when idle, and also how long a button press pauses auto-rotation before it resumes (one interval serves both).
+- `screen_rotation_interval_sec`: how long idle (no button press) on any screen other than HOME before it auto-returns to HOME, which then just sits updating until the next button press.
 
 All fields are optional except `wifi_ssid`/`wifi_password`/`sl_site_id` — omitted fields fall back to the defaults shown above (empty string for credentials, meaning that integration just won't connect). If the SD card is missing, unreadable, or the file is invalid JSON, the device still boots on defaults (WiFi/MQTT/weather all stay disconnected until a valid card is inserted and it's rebooted) — check serial output for the specific reason.
 

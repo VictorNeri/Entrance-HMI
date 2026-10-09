@@ -9,19 +9,21 @@ struct AppState {
   unsigned long last_full_refresh_ms = 0;
   int last_daily_refresh_yday = -1;  // tm_yday of the last forced daily refresh, -1 = never
   unsigned long last_manual_interaction_ms = 0;
-  unsigned long last_auto_rotation_ms = 0;
 };
 
 extern AppState app_state;
 
-// Single source of truth for "all screens" — nav.cpp's cycle ring, the
-// idle auto-rotation ring, and the footer dock's labels all derive from
-// this instead of each hand-maintaining their own list.
+// Single source of truth for "all screens" — nav.cpp's PRV/NEXT cycle
+// ring and the footer dock's labels both derive from this instead of
+// each hand-maintaining their own list. Order here is the physical
+// layout: HOME is the center the user always lands back on, PRV walks
+// "up" toward WEATHER, NEXT walks "down" toward TRANSIT/HA_CONTROL/
+// STATUS — see app_state_should_return_home() for what brings them
+// back.
 struct ScreenInfo {
   Screen screen;
   const char *label;      // footer dock label, keep <=7 chars for the cell width
   bool in_cycle_ring;      // PRV/NEXT (when not list-scrolling) cycles onto it
-  bool in_rotation_ring;    // idle auto-rotation cycles onto it
 };
 extern const ScreenInfo SCREEN_TABLE[];
 extern const size_t SCREEN_TABLE_LEN;
@@ -47,14 +49,15 @@ bool app_state_needs_forced_full_refresh();
 // clock above resets.
 void app_state_mark_full_refresh_done();
 
-// Auto-rotation: cycles HOME -> WEATHER -> TRANSIT on its own, using
-// sd_config.screen_rotation_interval_ms both as the cycle cadence and
-// as the "how long since the last button press" idle threshold before
-// resuming — one knob, not two. Never fires while on HA_CONTROL/STATUS,
-// so it can't interrupt someone mid-interaction with the HA controls;
-// it also won't pull the user back into rotation from those screens —
-// resuming only happens once they navigate back themselves.
 void app_state_mark_manual_interaction();
-bool app_state_should_auto_rotate();
-Screen app_state_next_rotation_screen();
-void app_state_mark_auto_rotated();
+
+// True once sd_config.screen_rotation_interval_ms has passed since the
+// last button press AND the current screen isn't already HOME — the
+// main loop responds by entering HOME. Deliberately uniform across
+// every other screen (WEATHER/TRANSIT/HA_CONTROL/STATUS alike): the
+// point is a quick glance anywhere always settles back on HOME on its
+// own, rather than the old behavior of endlessly auto-rotating through
+// a subset of screens. Naturally self-limiting — once current_screen
+// is HOME this returns false, so the main loop's app_state_enter_screen
+// call only fires once per idle period, not every tick.
+bool app_state_should_return_home();

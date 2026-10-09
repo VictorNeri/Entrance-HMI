@@ -115,17 +115,12 @@ void loop() {
     ui_render_current_screen(false);
   }
 
-  // Auto-rotation only cycles HOME/WEATHER/TRANSIT and only fires once
-  // idle — see app_state_should_auto_rotate() for the exact rule.
-  if (app_state_should_auto_rotate()) {
-    app_state_enter_screen(app_state_next_rotation_screen());
-    app_state_mark_auto_rotated();
-    // Matches manual navigation's re-arm-on-entry behavior below —
-    // without this, rotating onto TRANSIT would show stale data until
-    // the next background-cadence tick, up to 5 minutes later.
-    if (app_state.current_screen == Screen::TRANSIT) {
-      transit_client_fetch_now();
-    }
+  // A glance at WEATHER/TRANSIT/HA_CONTROL/STATUS settles back on HOME
+  // on its own once idle — see app_state_should_return_home() for the
+  // exact rule. HOME then just sits there updating via the normal data
+  // ticks below until the next button press.
+  if (app_state_should_return_home()) {
+    app_state_enter_screen(Screen::HOME);
     ui_render_current_screen(true);
   }
 
