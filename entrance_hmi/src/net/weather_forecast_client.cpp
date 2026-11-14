@@ -3,6 +3,7 @@
 #include <time.h>
 #include "../storage/sd_config.h"
 #include "http_client_helper.h"
+#include "root_certs.h"
 #include "wifi_manager.h"
 #include "net_log_shadow.h"
 
@@ -29,7 +30,7 @@ bool weather_forecast_client_fetch(ForecastData &out, int *http_status) {
   filter["list"][0]["weather"][0]["icon"] = true;
 
   JsonDocument doc;
-  bool ok = http_get_json(url, doc, 10000, &filter, "forecast", http_status);
+  bool ok = http_get_json(url, ROOT_CA_OPENWEATHERMAP, doc, 10000, &filter, "forecast", http_status);
 
   if (ok) {
     ForecastData next;

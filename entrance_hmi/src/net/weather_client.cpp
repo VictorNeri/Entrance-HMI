@@ -4,6 +4,7 @@
 #include <string.h>
 #include "../storage/sd_config.h"
 #include "http_client_helper.h"
+#include "root_certs.h"
 #include "wifi_manager.h"
 #include "net_log_shadow.h"
 
@@ -16,7 +17,7 @@ bool weather_client_fetch(WeatherData &out, int *http_status) {
            sd_config.owm_lat.c_str(), sd_config.owm_lon.c_str(), sd_config.owm_api_key.c_str());
 
   JsonDocument doc;
-  bool ok = http_get_json(url, doc, 8000, nullptr, "weather", http_status);
+  bool ok = http_get_json(url, ROOT_CA_OPENWEATHERMAP, doc, 8000, nullptr, "weather", http_status);
 
   if (ok) {
     JsonArray weather_arr = doc["weather"].as<JsonArray>();
