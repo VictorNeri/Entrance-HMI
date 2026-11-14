@@ -23,6 +23,14 @@ extern WeatherData weather_data;
 // http_get_json()).
 bool weather_client_fetch(WeatherData &out, int *http_status = nullptr);
 
-// True if the visible values differ enough to be worth an e-paper
-// refresh (skips redraws on a background poll with identical data).
+// Wind speed at which WEATHER's alerts column shows "Windy".
+constexpr float WEATHER_WINDY_THRESHOLD_MS = 8.0f;  // ~29 km/h
+
+bool weather_is_windy(const WeatherData &data);
+
+// True if anything the screens actually display would change — the
+// rounded temperature, humidity, description, icon, or the "Windy"
+// alert — so a background poll that changes nothing visible doesn't
+// cost an e-paper refresh, and one that does is never skipped. Keep in
+// sync with what screen_home/screen_weather render.
 bool weather_data_differs(const WeatherData &a, const WeatherData &b);

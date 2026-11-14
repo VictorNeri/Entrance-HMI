@@ -11,8 +11,6 @@
 
 namespace {
 
-constexpr float WINDY_THRESHOLD_MS = 8.0f;  // ~29 km/h
-
 // Age badges sit right of a column's size-24 heading, vertically
 // centered on it (heading glyphs are 24px tall, the badge 20px).
 constexpr uint16_t HEADING_BADGE_GAP = 10;
@@ -141,7 +139,7 @@ uint8_t compute_alerts(const char *out[], uint8_t max_out) {
     out[n++] = "Rain later";
   }
   if (snow && n < max_out) out[n++] = "Snow expected";
-  if (weather_data.valid && weather_data.wind_speed_ms >= WINDY_THRESHOLD_MS && n < max_out) {
+  if (weather_is_windy(weather_data) && n < max_out) {
     out[n++] = "Windy";
   }
   return n;
