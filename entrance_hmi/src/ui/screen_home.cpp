@@ -9,10 +9,20 @@
 #include "../net/weather_client.h"
 #include "../storage/calendar_store.h"
 #include "ui_chrome.h"
+#include "ui_stale.h"
 #include "ui_text_unicode.h"
 #include "weather_icons.h"
 
 namespace {
+
+// Age badges sit right of a column's size-24 heading, vertically
+// centered on it (heading glyphs are 24px tall, the badge 20px).
+constexpr uint16_t HEADING_BADGE_GAP = 10;
+constexpr uint16_t HEADING_BADGE_Y = UI_CONTENT_BODY_TOP + 2;
+
+uint16_t heading_badge_x(uint16_t column_x, const char *heading) {
+  return column_x + strlen(heading) * 12 + HEADING_BADGE_GAP;  // size-24 advance = 12px/char
+}
 
 // Three vertical columns (not horizontal bands) so each section gets
 // the full content height to spread its info across, rather than a
@@ -65,6 +75,8 @@ void render_weather_column() {
     EPD_ShowString(COL1_X, UI_CONTENT_BODY_TOP + 66, "first fetch", 24, BLACK);
     return;
   }
+  ui_draw_stale_badge(heading_badge_x(COL1_X, "WEATHER"), HEADING_BADGE_Y,
+                      weather_data.fetched_at_ms, ui_weather_stale_after_ms());
 
   // Icon as big as this column comfortably fits, centered (not
   // alongside the temperature the way WEATHER's "NOW" column does it)
@@ -121,6 +133,12 @@ void render_event_column() {
 
 void render_train_column() {
   EPD_ShowString(COL3_X, UI_CONTENT_BODY_TOP, "NEXT TRAIN", 24, BLACK);
+  // Shown even when the list has no train left in it — "No trains"
+  // from an hour-old fetch is just as misleading as an old countdown.
+  if (departure_list.valid) {
+    ui_draw_stale_badge(heading_badge_x(COL3_X, "NEXT TRAIN"), HEADING_BADGE_Y,
+                        departure_list.fetched_at_ms, ui_transit_stale_after_ms());
+  }
 
   const Departure *dep = find_next_train();
   if (!departure_list.valid || dep == nullptr) {

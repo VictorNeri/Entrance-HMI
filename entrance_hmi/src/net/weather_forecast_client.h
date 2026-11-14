@@ -12,6 +12,12 @@
 // for a fetch failure here specifically before trusting this.
 constexpr uint8_t MAX_FORECAST_ENTRIES = 8;
 
+// Forecast doesn't need to refresh as often as current conditions —
+// separate cadence, hardcoded rather than an SD-config field since it
+// doesn't need field tuning. Used by fetch_worker (scheduling) and
+// ui_stale (when to flag the data as old).
+constexpr unsigned long FORECAST_POLL_INTERVAL_MS = 30UL * 60 * 1000;
+
 struct ForecastEntry {
   int hour = 0;       // local hour (0-23) this entry represents
   float temp_c = 0;

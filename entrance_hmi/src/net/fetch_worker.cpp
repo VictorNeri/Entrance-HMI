@@ -23,10 +23,6 @@ constexpr BaseType_t TASK_CORE = 0;
 // wakes it early (a request notifies it immediately).
 constexpr TickType_t IDLE_WAIT = pdMS_TO_TICKS(500);
 
-// Forecast doesn't need to refresh as often as current conditions —
-// separate cadence, hardcoded rather than an SD-config field since it
-// doesn't need field tuning.
-constexpr unsigned long FORECAST_POLL_INTERVAL_MS = 30UL * 60 * 1000;
 
 // Rate-limit backoff: after an HTTP 429, that endpoint waits at least
 // this long before its next request (scheduled or user-requested),
