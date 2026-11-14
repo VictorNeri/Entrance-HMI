@@ -1,6 +1,7 @@
 #include "weather_client.h"
 #include <ArduinoJson.h>
-#include <math.h>
+#include <stdio.h>
+#include <string.h>
 #include "../storage/sd_config.h"
 #include "http_client_helper.h"
 #include "wifi_manager.h"
@@ -40,7 +41,32 @@ bool weather_client_fetch(WeatherData &out, int *http_status) {
   return ok;
 }
 
+namespace {
+
+// Same "%.0f" the screens draw the temperature with, so the comparison
+// below sees exactly the text that would change on screen — including
+// printf's half-to-even rounding and the "-0" it prints for values in
+// (-0.5, 0), which plain float rounding would treat as equal to 0.
+bool same_rendered_temp(float a, float b) {
+  char a_str[16], b_str[16];
+  snprintf(a_str, sizeof(a_str), "%.0f", a);
+  snprintf(b_str, sizeof(b_str), "%.0f", b);
+  return strcmp(a_str, b_str) == 0;
+}
+
+}  // namespace
+
+bool weather_is_windy(const WeatherData &data) {
+  return data.valid && data.wind_speed_ms >= WEATHER_WINDY_THRESHOLD_MS;
+}
+
 bool weather_data_differs(const WeatherData &a, const WeatherData &b) {
-  return a.valid != b.valid || fabsf(a.temp_c - b.temp_c) >= 0.05f || a.humidity != b.humidity ||
-         a.description != b.description;
+  // Compares exactly what the screens render, nothing finer: the
+  // temperature as its drawn text, the icon (flips day/night even when
+  // the description doesn't), and wind only as the on/off "Windy"
+  // alert it drives. feels_like isn't shown anywhere, so it's left out
+  // on purpose.
+  return a.valid != b.valid || !same_rendered_temp(a.temp_c, b.temp_c) || a.humidity != b.humidity ||
+         a.description != b.description || a.icon != b.icon ||
+         weather_is_windy(a) != weather_is_windy(b);
 }
