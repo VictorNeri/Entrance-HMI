@@ -1,0 +1,88 @@
+name: Build firmware
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "entrance_hmi/**"
+      - ".github/workflows/build.yml"
+  pull_request:
+    paths:
+      - "entrance_hmi/**"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch/PR supersedes an in-flight build.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned to what the firmware is developed and flashed with — bump
+  # these deliberately (and together with local installs), not
+  # implicitly via "latest".
+  ESP32_CORE_VERSION: "3.3.11"
+  ESP32_INDEX_URL: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+  LIBRARIES: "ArduinoJson@7.4.3 PubSubClient@2.8"
+  # Same board options as the README's Build section (8MB flash, 3MB
+  # APP partition, PSRAM) — the core's defaults target a 4MB variant.
+  FQBN: esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=enabled
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      # The ESP32 core + toolchains are several hundred MB; caching them
+      # takes a warm build from minutes of downloading to seconds.
+      - name: Cache Arduino core and libraries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries
+          key: arduino-esp32-${{ env.ESP32_CORE_VERSION }}-${{ env.LIBRARIES }}
+
+      - name: Install ESP32 core and libraries
+        run: |
+          arduino-cli config init --overwrite --additional-urls "$ESP32_INDEX_URL"
+          arduino-cli core update-index
+          arduino-cli core install "esp32:esp32@${ESP32_CORE_VERSION}"
+          arduino-cli lib install $LIBRARIES
+
+      # config.h is gitignored (it holds the real OTA password); the
+      # example's placeholder values are enough to compile.
+      - name: Use example config
+        run: cp entrance_hmi/config.example.h entrance_hmi/config.h
+
+      - name: Compile
+        # Explicit `shell: bash` runs with pipefail, so a failed compile
+        # still fails the step despite being piped through tee.
+        shell: bash
+        run: |
+          arduino-cli compile --fqbn "$FQBN" --warnings default \
+            --output-dir build entrance_hmi 2>&1 | tee compile.log
+          # Surface the flash/RAM usage lines in the job summary.
+          {
+            echo '### Firmware size'
+            echo '```'
+            grep -E '^(Sketch uses|Global variables use)' compile.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Built with the placeholder config.h, so its OTA password is the
+      # example's — handy for checking a build, not for flashing as-is.
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: entrance_hmi-${{ github.sha }}
+          path: build/entrance_hmi.ino.bin
+          if-no-files-found: error
+          retention-days: 14
