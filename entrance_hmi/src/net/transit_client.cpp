@@ -12,8 +12,6 @@ DepartureList departure_list;
 
 namespace {
 
-unsigned long last_fetch_ms = 0;
-
 // SL's `expected`/`scheduled` fields are "YYYY-MM-DDTHH:MM:SS", no UTC
 // offset — local Stockholm wall-clock time, same frame as this
 // device's own NTP-synced local clock, so mktime() (which uses the
@@ -31,7 +29,9 @@ time_t parse_sl_datetime(const char *iso) {
   return mktime(&tm_val);
 }
 
-bool fetch_once() {
+}  // namespace
+
+bool transit_client_fetch(DepartureList &out, int *http_status) {
   // The forecast window has to cover at least the walk time, or the
   // walk-time filter would hide every departure the API even returns.
   // Scaled with a buffer so there's still something left to show after
@@ -66,15 +66,19 @@ bool fetch_once() {
   // past 8s even though the API itself responds in well under a
   // second — confirmed by direct testing against the live SL API.
   JsonDocument doc;
-  bool ok = http_get_json(url, doc, 15000, &filter, "transit");
-  if (!ok) {
+  int status = 0;
+  bool ok = http_get_json(url, doc, 15000, &filter, "transit", &status);
+  // ...except when SL is rate-limiting us (429): an immediate retry
+  // only adds to the request count that got us limited. The fetch
+  // worker backs off instead.
+  if (!ok && status != HTTP_STATUS_TOO_MANY_REQUESTS) {
     // Observed on-device: HTTP 200 but a truncated body (IncompleteInput)
     // even with strong WiFi signal and plenty of free heap — a one-off
     // blip on the connection to SL, not a resource limit. Retry once
     // immediately rather than leaving stale data on screen for a full
     // poll interval.
     doc.clear();
-    ok = http_get_json(url, doc, 15000, &filter, "transit");
+    ok = http_get_json(url, doc, 15000, &filter, "transit", &status);
   }
 
   if (ok) {
@@ -93,28 +97,13 @@ bool fetch_once() {
       next.count++;
     }
 
-    departure_list = next;
+    out = next;
   }
+  if (http_status != nullptr) *http_status = status;
 
   Serial.printf("[transit] fetch %s, %u departures, free heap: %u bytes\n", ok ? "ok" : "failed",
-                (unsigned)departure_list.count, (unsigned)ESP.getFreeHeap());
+                ok ? (unsigned)out.count : 0u, (unsigned)ESP.getFreeHeap());
   return ok;
-}
-
-}  // namespace
-
-bool transit_client_tick(unsigned long poll_interval_ms) {
-  if (!wifi_is_connected()) return false;
-  unsigned long now = millis();
-  if (now - last_fetch_ms < poll_interval_ms) return false;
-  last_fetch_ms = now;
-  return fetch_once();
-}
-
-bool transit_client_fetch_now() {
-  if (!wifi_is_connected()) return false;
-  last_fetch_ms = millis();
-  return fetch_once();
 }
 
 bool transit_departure_is_reachable(const Departure &dep) {

@@ -8,20 +8,14 @@
 
 WeatherData weather_data;
 
-namespace {
-
-unsigned long last_fetch_ms = 0;
-bool changed_this_fetch = false;
-
-bool fetch_once() {
+bool weather_client_fetch(WeatherData &out, int *http_status) {
   char url[256];
   snprintf(url, sizeof(url),
            "https://api.openweathermap.org/data/2.5/weather?lat=%s&lon=%s&units=metric&appid=%s",
            sd_config.owm_lat.c_str(), sd_config.owm_lon.c_str(), sd_config.owm_api_key.c_str());
 
   JsonDocument doc;
-  bool ok = http_get_json(url, doc, 8000, nullptr, "weather");
-  changed_this_fetch = false;
+  bool ok = http_get_json(url, doc, 8000, nullptr, "weather", http_status);
 
   if (ok) {
     JsonArray weather_arr = doc["weather"].as<JsonArray>();
@@ -37,13 +31,7 @@ bool fetch_once() {
       next.icon = weather_arr[0]["icon"].as<const char *>();
       next.valid = true;
       next.fetched_at_ms = millis();
-
-      changed_this_fetch = !weather_data.valid ||
-                            fabsf(next.temp_c - weather_data.temp_c) >= 0.05f ||
-                            next.humidity != weather_data.humidity ||
-                            next.description != weather_data.description;
-
-      weather_data = next;
+      out = next;
     }
   }
 
@@ -52,19 +40,7 @@ bool fetch_once() {
   return ok;
 }
 
-}  // namespace
-
-bool weather_client_tick() {
-  if (!wifi_is_connected()) return false;
-  unsigned long now = millis();
-  if (now - last_fetch_ms < sd_config.weather_poll_interval_ms) return false;
-  last_fetch_ms = now;
-  bool ok = fetch_once();
-  return ok && changed_this_fetch;
-}
-
-bool weather_client_fetch_now() {
-  if (!wifi_is_connected()) return false;
-  last_fetch_ms = millis();
-  return fetch_once();
+bool weather_data_differs(const WeatherData &a, const WeatherData &b) {
+  return a.valid != b.valid || fabsf(a.temp_c - b.temp_c) >= 0.05f || a.humidity != b.humidity ||
+         a.description != b.description;
 }
