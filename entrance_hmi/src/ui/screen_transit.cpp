@@ -4,6 +4,7 @@
 #include "../epd_driver/EPD_Init.h"
 #include "../net/transit_client.h"
 #include "ui_chrome.h"
+#include "ui_stale.h"
 #include "ui_text_unicode.h"
 
 namespace {
@@ -102,4 +103,17 @@ void screen_transit_render() {
   }
 
   EPD_ShowString(UI_CONTENT_LEFT, UI_CONTENT_HINT_Y, "OK: refresh   EXIT: home", 16, BLACK);
+
+  // One fetch feeds both panels, so one badge — right-aligned on the
+  // hint line (bottom edge on UI_CONTENT_BOTTOM) rather than repeated in
+  // each panel heading. Drawn whenever a fetch has ever succeeded,
+  // including when it returned no departures.
+  if (departure_list.valid) {
+    unsigned long stale_after = ui_transit_stale_after_ms();
+    uint16_t w = ui_stale_badge_width(departure_list.fetched_at_ms, stale_after);
+    if (w > 0) {
+      ui_draw_stale_badge(UI_CONTENT_RIGHT - w, UI_CONTENT_BOTTOM - UI_STALE_BADGE_H, departure_list.fetched_at_ms,
+                          stale_after);
+    }
+  }
 }

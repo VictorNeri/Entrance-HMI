@@ -6,11 +6,21 @@
 #include "../net/weather_client.h"
 #include "../net/weather_forecast_client.h"
 #include "ui_chrome.h"
+#include "ui_stale.h"
 #include "weather_icons.h"
 
 namespace {
 
 constexpr float WINDY_THRESHOLD_MS = 8.0f;  // ~29 km/h
+
+// Age badges sit right of a column's size-24 heading, vertically
+// centered on it (heading glyphs are 24px tall, the badge 20px).
+constexpr uint16_t HEADING_BADGE_GAP = 10;
+constexpr uint16_t HEADING_BADGE_Y = UI_CONTENT_BODY_TOP + 2;
+
+uint16_t heading_badge_x(uint16_t column_x, const char *heading) {
+  return column_x + strlen(heading) * 12 + HEADING_BADGE_GAP;  // size-24 advance = 12px/char
+}
 
 void render_current_column() {
   EPD_ShowString(UI_COL1_X, UI_CONTENT_BODY_TOP, "NOW", 24, BLACK);
@@ -20,6 +30,8 @@ void render_current_column() {
     EPD_ShowString(UI_COL1_X, UI_CONTENT_BODY_TOP + 66, "first fetch", 24, BLACK);
     return;
   }
+  ui_draw_stale_badge(heading_badge_x(UI_COL1_X, "NOW"), HEADING_BADGE_Y,
+                      weather_data.fetched_at_ms, ui_weather_stale_after_ms());
 
   draw_weather_icon(UI_COL1_X + 18, UI_CONTENT_BODY_TOP + 55, weather_data.icon);
 
@@ -53,6 +65,8 @@ void render_hourly_chart() {
     EPD_ShowString(UI_COL2_X, UI_CONTENT_BODY_TOP + 54, "forecast", 16, BLACK);
     return;
   }
+  ui_draw_stale_badge(heading_badge_x(UI_COL2_X, "NEXT HOURS"), HEADING_BADGE_Y,
+                      forecast_data.fetched_at_ms, ui_forecast_stale_after_ms());
 
   uint8_t count = forecast_data.count;
   float min_t = forecast_data.items[0].temp_c, max_t = forecast_data.items[0].temp_c;
