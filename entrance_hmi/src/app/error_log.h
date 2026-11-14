@@ -7,7 +7,11 @@
 // remembers the most recent one for on-screen display.
 void error_log_set(const char *message);
 
-// "" if nothing has been recorded yet.
+
+// Safe to call from any task.
+// "" if nothing has been recorded yet. Returns a snapshot buffer that
+// the next error_log_get() call overwrites — call from loop() (the UI)
+// only.
 const char *error_log_get();
 
 // millis() timestamp of the last error_log_set() call, 0 if none yet.

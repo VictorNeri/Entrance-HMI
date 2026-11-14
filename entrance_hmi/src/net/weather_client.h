@@ -12,16 +12,17 @@ struct WeatherData {
   unsigned long fetched_at_ms = 0;
 };
 
+// Published copy the UI reads. Main thread only — written by
+// fetch_worker_collect(), never by the fetch itself.
 extern WeatherData weather_data;
 
-// Call every loop() iteration. No-op until 10 minutes have passed
-// since the last fetch. Returns true only if a fetch happened AND the
-// values actually changed (so callers can skip a redraw on identical
-// data — avoids needless e-paper wear on the automatic background poll).
-bool weather_client_tick();
+// One blocking fetch (bounded by the HTTP timeout) into `out`; `out` is
+// untouched on failure. Called from the fetch worker task only — see
+// fetch_worker.h for scheduling.
+// `http_status`, if given, receives the HTTP status code (see
+// http_get_json()).
+bool weather_client_fetch(WeatherData &out, int *http_status = nullptr);
 
-// Force an immediate fetch (e.g. OK button on the WEATHER screen).
-// Blocking, bounded by the HTTP timeout. Returns true if the fetch
-// succeeded (regardless of whether values changed — this is a
-// deliberate user-triggered action, not the silent background poll).
-bool weather_client_fetch_now();
+// True if the visible values differ enough to be worth an e-paper
+// refresh (skips redraws on a background poll with identical data).
+bool weather_data_differs(const WeatherData &a, const WeatherData &b);

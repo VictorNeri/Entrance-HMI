@@ -1,14 +1,15 @@
 // Entrance HMI — weather, SL transit departures, and MQTT-configured
 // Home Assistant control buttons on a 5-screen, 5-button e-paper kiosk.
+#include <esp_system.h>
+#include <esp_task_wdt.h>
 #include "src/app/app_state.h"
+#include "src/app/error_log.h"
 #include "src/app/nav.h"
 #include "src/input/buttons.h"
+#include "src/net/fetch_worker.h"
 #include "src/net/mqtt_client.h"
 #include "src/net/ota_manager.h"
 #include "src/net/time_sync.h"
-#include "src/net/transit_client.h"
-#include "src/net/weather_client.h"
-#include "src/net/weather_forecast_client.h"
 #include "src/net/wifi_manager.h"
 #include "src/storage/broadcast_store.h"
 #include "src/storage/button_config_store.h"
@@ -18,9 +19,60 @@
 #include "src/ui/ui_common.h"
 #include "src/net/net_log_shadow.h"
 
+namespace {
+
+// Task watchdog budget for loop() and the fetch worker. The core's
+// default is 5s, too short for normal blocking work here: a full
+// e-paper refresh, an MQTT connect attempt (DNS + TCP + CONNACK wait),
+// or one HTTPS attempt on the worker (connect + handshake + read, each
+// bounded at <=15s). 60s is comfortably above all of those, and still
+// short enough that a genuinely hung device (e.g. the EPD driver's
+// unbounded busy-wait, or a wedged socket) reboots itself within a
+// minute instead of sitting frozen on the wall.
+constexpr uint32_t WATCHDOG_TIMEOUT_MS = 60UL * 1000;
+
+void watchdog_begin() {
+  esp_task_wdt_config_t config = {
+      .timeout_ms = WATCHDOG_TIMEOUT_MS,
+      .idle_core_mask = 1 << 0,  // keep the core's default: watch core 0's idle task
+      .trigger_panic = true,     // panic -> reboot, rather than just logging
+  };
+  esp_task_wdt_reconfigure(&config);
+}
+
+const char *reset_reason_name(esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_POWERON: return "power-on";
+    case ESP_RST_SW: return "software";
+    case ESP_RST_PANIC: return "panic";
+    case ESP_RST_INT_WDT: return "interrupt watchdog";
+    case ESP_RST_TASK_WDT: return "task watchdog";
+    case ESP_RST_WDT: return "other watchdog";
+    case ESP_RST_BROWNOUT: return "brownout";
+    default: return "other";
+  }
+}
+
+// So a self-recovery is visible after the fact — on serial/net-log
+// and on the STATUS screen's error line — instead of silent.
+void log_reset_reason() {
+  esp_reset_reason_t reason = esp_reset_reason();
+  Serial.printf("[boot] reset reason: %s (%d)\n", reset_reason_name(reason), (int)reason);
+  if (reason == ESP_RST_TASK_WDT || reason == ESP_RST_INT_WDT || reason == ESP_RST_WDT ||
+      reason == ESP_RST_PANIC || reason == ESP_RST_BROWNOUT) {
+    char msg[64];
+    snprintf(msg, sizeof(msg), "boot: recovered from %s reset", reset_reason_name(reason));
+    error_log_set(msg);
+  }
+}
+
+}  // namespace
+
 void setup() {
   Serial.begin(115200);
   delay(500);
+  watchdog_begin();
+  log_reset_reason();
 
   ui_init();
   buttons_init();
@@ -39,7 +91,13 @@ void setup() {
   broadcast_store_load_from_disk();
 
   wifi_manager_begin();
+  // Owns all HTTPS fetching from here on, so loop() never blocks on it.
+  fetch_worker_begin();
   ui_render_current_screen(true);
+  // Subscribes the loop task to the watchdog (the core then feeds it
+  // once per loop() iteration). Last in setup() — setup's own blocking
+  // steps (the boot WiFi connect alone waits up to 15s) aren't covered.
+  enableLoopWDT();
   Serial.println("Entrance HMI ready.");
 }
 
@@ -79,12 +137,11 @@ void loop() {
     ui_render_current_screen(true);
   }
 
-  // MQTT serviced before the blocking HTTPS ticks below (weather,
-  // forecast, and transit are each bounded at 8s, and can add up to
-  // more than the MQTT keepalive window if several are due the same
-  // iteration) — mqtt.loop() needs a timely, regular call to send its
-  // own keepalive pings, or the broker disconnects it for "exceeded
-  // timeout" even though the connection itself is healthy.
+  // mqtt.loop() needs a timely, regular call to send its own keepalive
+  // pings, or the broker disconnects it for "exceeded timeout" even
+  // though the connection itself is healthy. HTTPS fetches no longer
+  // run on this loop (see fetch_worker.h), so nothing here blocks long
+  // enough to starve it.
   MqttTickResult mqtt_tick = mqtt_client_tick();
   bool ha_updated_visible = mqtt_tick.ha_changed && app_state.current_screen == Screen::HA_CONTROL;
   // Calendar changes redraw regardless of visible screen — the header's
@@ -100,18 +157,16 @@ void loop() {
     ui_render_current_screen(true);
   }
 
-  bool weather_on_screen = app_state.current_screen == Screen::WEATHER;
-  bool weather_updated_visible = weather_client_tick() && weather_on_screen;
-  bool forecast_updated_visible = weather_forecast_client_tick() && weather_on_screen;
-  if (weather_updated_visible || forecast_updated_visible) {
-    ui_render_current_screen(false);
-  }
-
+  // Weather/forecast/transit results fetched in the background since
+  // the last iteration get published here. Same redraw rules as when
+  // these fetches ran inline: only the screen that shows the data
+  // redraws now (HOME picks them up on its next per-minute redraw).
   bool transit_on_screen = app_state.current_screen == Screen::TRANSIT;
-  unsigned long transit_poll_interval_ms =
-      transit_on_screen ? sd_config.transit_poll_active_ms : sd_config.transit_poll_background_ms;
-  bool transit_updated_visible = transit_client_tick(transit_poll_interval_ms) && transit_on_screen;
-  if (transit_updated_visible) {
+  fetch_worker_set_transit_active(transit_on_screen);
+  FetchUpdates fetched = fetch_worker_collect();
+  bool weather_on_screen = app_state.current_screen == Screen::WEATHER;
+  if ((weather_on_screen && (fetched.weather || fetched.forecast)) ||
+      (transit_on_screen && fetched.transit)) {
     ui_render_current_screen(false);
   }
 
@@ -142,18 +197,16 @@ void loop() {
   }
 
   if (event.button == Button::OK) {
+    // Refresh requests are non-blocking: the fetch runs on the worker
+    // and the screen redraws when fetch_worker_collect() above
+    // publishes the result (user-requested weather always redraws,
+    // even if the values didn't change).
     if (app_state.current_screen == Screen::WEATHER) {
-      // Both fetches run regardless of the other's outcome (either one
-      // succeeding is worth a redraw), matching the pattern below.
-      bool current_ok = weather_client_fetch_now();
-      bool forecast_ok = weather_forecast_client_fetch_now();
-      if (current_ok || forecast_ok) {
-        ui_render_current_screen(false);
-        return;
-      }
+      fetch_worker_request_weather();
+      return;
     }
-    if (app_state.current_screen == Screen::TRANSIT && transit_client_fetch_now()) {
-      ui_render_current_screen(false);
+    if (app_state.current_screen == Screen::TRANSIT) {
+      fetch_worker_request_transit();
       return;
     }
     if (app_state.current_screen == Screen::HA_CONTROL && ha_entity_list.count > 0) {
@@ -176,7 +229,7 @@ void loop() {
   // within the screen only ever produces PARTIAL) — re-arm fast
   // polling immediately rather than waiting for the next tick.
   if (redraw == RedrawKind::FULL && app_state.current_screen == Screen::TRANSIT) {
-    transit_client_fetch_now();
+    fetch_worker_request_transit();
   }
 
   if (redraw != RedrawKind::NONE) {

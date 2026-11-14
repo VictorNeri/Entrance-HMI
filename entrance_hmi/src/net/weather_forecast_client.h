@@ -25,15 +25,13 @@ struct ForecastData {
   unsigned long fetched_at_ms = 0;
 };
 
+// Published copy the UI reads. Main thread only — written by
+// fetch_worker_collect(), never by the fetch itself.
 extern ForecastData forecast_data;
 
-// Call every loop() iteration. No-op until 30 minutes have passed since
-// the last fetch (forecast data doesn't need to refresh as often as
-// current conditions) — separate cadence from weather_client, hardcoded
-// rather than a new SD-config field since this doesn't need field
-// tuning. Returns true only if a fetch happened AND changed.
-bool weather_forecast_client_tick();
-
-// Force an immediate fetch (e.g. OK button on WEATHER). Blocking,
-// bounded by the HTTP timeout.
-bool weather_forecast_client_fetch_now();
+// One blocking fetch (bounded by the HTTP timeout) into `out`; `out` is
+// untouched on failure. Called from the fetch worker task only, which
+// also owns the 30-minute cadence — see fetch_worker.h.
+// `http_status`, if given, receives the HTTP status code (see
+// http_get_json()).
+bool weather_forecast_client_fetch(ForecastData &out, int *http_status = nullptr);

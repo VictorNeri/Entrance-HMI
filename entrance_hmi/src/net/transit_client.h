@@ -19,18 +19,17 @@ struct DepartureList {
   unsigned long fetched_at_ms = 0;
 };
 
+// Published copy the UI reads. Main thread only — written by
+// fetch_worker_collect(), never by the fetch itself.
 extern DepartureList departure_list;
 
-// Call every loop() iteration. `poll_interval_ms` is supplied by the
-// caller so it can implement screen-active-gated polling (fast while
-// TRANSIT is visible, slow otherwise) without this module needing to
-// know about screen state.
-bool transit_client_tick(unsigned long poll_interval_ms);
-
-// Force an immediate fetch (OK button, or re-arming fast polling right
-// after navigating onto the TRANSIT screen). Blocking, bounded by the
-// HTTP timeout.
-bool transit_client_fetch_now();
+// One blocking fetch (retried once on failure, except on HTTP 429;
+// each attempt bounded by the HTTP timeout) into `out`; `out` is
+// untouched on failure. `http_status`, if given, receives the last
+// attempt's HTTP status code (see http_get_json()). Called from the
+// fetch worker task only, which owns the active/background poll
+// cadence and the 429 backoff — see fetch_worker.h.
+bool transit_client_fetch(DepartureList &out, int *http_status = nullptr);
 
 // True if this departure is still catchable given sd_config.walk_time_min
 // minutes to walk to the station — i.e. its expected time is at least

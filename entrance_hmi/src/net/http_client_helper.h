@@ -20,5 +20,11 @@
 // `context`, if given, tags the caller (e.g. "weather", "transit") in
 // both the serial diagnostic and the error_log entry shown on the
 // STATUS screen, so a failure there is traceable to which fetch it was.
+//
+// `http_status`, if given, receives the HTTP status code (negative for
+// an HTTPClient transport error, 0 if the request never started) — so
+// callers can react to specific codes, e.g. back off on 429.
 bool http_get_json(const char *url, JsonDocument &doc, uint16_t timeout_ms = 8000,
-                    const JsonDocument *filter = nullptr, const char *context = "http");
+                    const JsonDocument *filter = nullptr, const char *context = "http",
+                    int *http_status = nullptr);
+constexpr int HTTP_STATUS_TOO_MANY_REQUESTS = 429;

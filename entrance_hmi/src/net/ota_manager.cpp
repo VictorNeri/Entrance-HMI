@@ -1,5 +1,6 @@
 #include "ota_manager.h"
 #include <ArduinoOTA.h>
+#include <esp_task_wdt.h>
 #include <stdio.h>
 #include "../../config.h"
 #include "../app/error_log.h"
@@ -37,6 +38,10 @@ void start() {
   });
   ArduinoOTA.onEnd([]() { Serial.println("[ota] update complete, rebooting"); });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    // An upload runs entirely inside ArduinoOTA.handle(), blocking
+    // loop() for far longer than the task watchdog allows — feed it
+    // per chunk so a healthy update isn't reset mid-flash.
+    esp_task_wdt_reset();
     Serial.printf("[ota] %u%%\n", total > 0 ? (progress * 100) / total : 0);
   });
   ArduinoOTA.onError([](ota_error_t error) {
