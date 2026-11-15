@@ -20,10 +20,11 @@ struct MqttTickResult {
 MqttTickResult mqtt_client_tick();
 
 // Publish a toggle command for the given entity (OK button on
-// HA_CONTROL). No-op if not connected. Does not update local state —
+// HA_CONTROL). Not sent if MQTT is down. Does not update local state —
 // the entity's displayed state only changes once its state_topic
 // confirms the change, not optimistically.
-void mqtt_client_publish_toggle(const String &entity_id);
+// Returns false if MQTT is down or the publish failed (not sent).
+bool mqtt_client_publish_toggle(const String &entity_id);
 
 // For the header's connection indicator.
 bool mqtt_is_connected();

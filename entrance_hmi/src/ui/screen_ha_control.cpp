@@ -1,6 +1,7 @@
 #include "screen_ha_control.h"
 #include <stdio.h>
 #include "../app/app_state.h"
+#include "../app/ha_pending.h"
 #include "../epd_driver/EPD.h"
 #include "../epd_driver/EPD_Init.h"
 #include "../storage/button_config_store.h"
@@ -29,7 +30,24 @@ void screen_ha_control_render() {
     const char *state_text = !entity.state_known ? "state: unknown"
                               : entity.state_on   ? "state: ON"
                                                    : "state: OFF";
-    EPD_ShowString(UI_CONTENT_LEFT, UI_CONTENT_BODY_TOP + 50, state_text, 24, BLACK);
+    // Pending-toggle note after the (still HA-confirmed) state.
+    const char *note = nullptr;
+    switch (ha_pending_status(entity)) {
+      case HaPendingStatus::WAITING:
+        note = "  - sent, waiting for HA...";
+        break;
+      case HaPendingStatus::TIMED_OUT:
+        note = "  - no response from HA";
+        break;
+      case HaPendingStatus::NOT_SENT:
+        note = "  - not sent (MQTT offline)";
+        break;
+      case HaPendingStatus::NONE:
+        break;
+    }
+    char state_line[64];
+    snprintf(state_line, sizeof(state_line), "%s%s", state_text, note != nullptr ? note : "");
+    EPD_ShowString(UI_CONTENT_LEFT, UI_CONTENT_BODY_TOP + 50, state_line, 24, BLACK);
 
     char footer[32];
     snprintf(footer, sizeof(footer), "(%d / %d)", index + 1, ha_entity_list.count);
