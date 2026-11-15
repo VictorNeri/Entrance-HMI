@@ -20,6 +20,8 @@ char latin1_fallback(uint8_t second_byte) {
       return 'A';  // Ä
     case 0x96:
       return 'O';  // Ö
+    case 0xA9:
+      return 'e';  // é (shows up in SL notices, e.g. "café")
     default:
       return 0;
   }
@@ -55,4 +57,31 @@ void draw_utf8_string(uint16_t x, uint16_t y, const char *utf8, uint16_t size, u
     // actual length, unlike advancing by a presumed sequence length.
     p++;
   }
+}
+
+size_t utf8_to_ascii(const char *utf8, char *out, size_t out_size) {
+  const uint8_t *p = reinterpret_cast<const uint8_t *>(utf8);
+  size_t n = 0;
+
+  while (*p != '\0' && n + 1 < out_size) {
+    uint8_t b = *p;
+
+    if (b < 0x80) {
+      out[n++] = (b == '\n' || b == '\r' || b == '\t') ? ' ' : (b < ' ' ? '?' : (char)b);
+      p++;
+      continue;
+    }
+
+    if (b == 0xC3 && p[1] != '\0') {
+      char fallback = latin1_fallback(p[1]);
+      if (fallback != 0) out[n++] = fallback;
+      p += 2;
+      continue;
+    }
+
+    p++;  // same one-byte skip as draw_utf8_string()
+  }
+
+  out[n] = '\0';
+  return n;
 }

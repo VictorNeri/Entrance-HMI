@@ -12,10 +12,26 @@ struct Departure {
   time_t expected_epoch = 0;  // parsed from SL's `expected` field; 0 if unparseable
 };
 
+// SL disruption notices ("deviations"): stop-wide ones from the
+// response's `stop_deviations`, plus any attached to individual
+// departures. Deduplicated by message and capped at the
+// MAX_TRANSIT_NOTICES most important; messages are truncated to
+// MAX_TRANSIT_NOTICE_LEN bytes (Swedish UTF-8 text — draw with the
+// ui_text_unicode helpers).
+constexpr uint8_t MAX_TRANSIT_NOTICES = 2;
+constexpr size_t MAX_TRANSIT_NOTICE_LEN = 300;
+
+struct TransitNotice {
+  String message;
+  int importance = 0;  // SL's importance_level; higher = more important
+};
+
 struct DepartureList {
   bool valid = false;
   uint8_t count = 0;
   Departure items[MAX_DEPARTURES];
+  uint8_t notice_count = 0;
+  TransitNotice notices[MAX_TRANSIT_NOTICES];  // most important first
   unsigned long fetched_at_ms = 0;
 };
 

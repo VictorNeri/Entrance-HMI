@@ -1,5 +1,6 @@
 #include "screen_transit.h"
 #include <stdio.h>
+#include <string.h>
 #include "../epd_driver/EPD.h"
 #include "../epd_driver/EPD_Init.h"
 #include "../net/transit_client.h"
@@ -13,6 +14,18 @@ constexpr uint16_t PANEL_DIVIDER_X = 380;
 constexpr uint16_t LEFT_PANEL_X = UI_CONTENT_LEFT;  // 20
 constexpr uint16_t RIGHT_PANEL_X = 396;
 constexpr uint8_t MAX_SHOWN = 3;
+
+// Disruption-notice strip: when SL reports any, each panel gives up its
+// third departure row (rows end at y=164) so notices get the band
+// between the panels and the hint line — up to NOTICE_MAX_LINES at
+// size 16 (8px/char, so ~90 chars per line across the content width).
+constexpr uint8_t MAX_SHOWN_WITH_NOTICES = 2;
+constexpr uint16_t NOTICE_DIVIDER_Y = 168;
+constexpr uint16_t NOTICE_TOP_Y = 174;
+constexpr uint16_t NOTICE_LINE_H = 17;
+constexpr uint8_t NOTICE_MAX_LINES = 3;
+constexpr uint8_t NOTICE_FONT = 16;
+constexpr size_t NOTICE_LINE_CHARS = (UI_CONTENT_RIGHT - UI_CONTENT_LEFT) / (NOTICE_FONT / 2);
 
 bool is_bus(const Departure &dep) {
   return dep.transport_mode == "BUS";
@@ -56,13 +69,70 @@ void draw_train_icon(uint16_t x, uint16_t y) {
   EPD_DrawCircle(x + 26, y + 16, 2, BLACK, 1);
 }
 
+// Word-wraps `text` (ASCII) into at most `max_lines` lines of
+// NOTICE_LINE_CHARS starting at line `first_line`; a word longer than
+// a line is hard-split. If the text doesn't fit, the last line ends in
+// "...". Returns the number of lines drawn.
+uint8_t draw_wrapped(const char *text, uint8_t first_line, uint8_t max_lines) {
+  uint8_t lines = 0;
+  const char *p = text;
+
+  while (*p != '\0' && lines < max_lines) {
+    while (*p == ' ') p++;
+    if (*p == '\0') break;
+
+    size_t remaining = strlen(p);
+    size_t take = remaining;
+    if (remaining > NOTICE_LINE_CHARS) {
+      take = NOTICE_LINE_CHARS;
+      while (take > 0 && p[take] != ' ') take--;  // break at the last space that fits
+      if (take == 0) take = NOTICE_LINE_CHARS;
+    }
+
+    char line[NOTICE_LINE_CHARS + 1];
+    bool last_line = lines + 1 == max_lines;
+    if (last_line && take < remaining) {
+      // Out of room: cut to make space for the ellipsis.
+      size_t keep = take;
+      if (keep > NOTICE_LINE_CHARS - 3) keep = NOTICE_LINE_CHARS - 3;
+      while (keep > 0 && p[keep - 1] == ' ') keep--;
+      memcpy(line, p, keep);
+      memcpy(line + keep, "...", 4);
+    } else {
+      memcpy(line, p, take);
+      line[take] = '\0';
+    }
+
+    EPD_ShowString(UI_CONTENT_LEFT, NOTICE_TOP_Y + (first_line + lines) * NOTICE_LINE_H, line, NOTICE_FONT,
+                   BLACK);
+    lines++;
+    p += take;
+  }
+  return lines;
+}
+
+// Notices most-important first, each starting on a new line with a
+// "! " marker; whatever doesn't fit in NOTICE_MAX_LINES is truncated.
+void render_notices() {
+  EPD_DrawLine(UI_CONTENT_LEFT, NOTICE_DIVIDER_Y, UI_CONTENT_RIGHT, NOTICE_DIVIDER_Y, BLACK);
+
+  uint8_t used = 0;
+  for (uint8_t i = 0; i < departure_list.notice_count && used < NOTICE_MAX_LINES; i++) {
+    char text[MAX_TRANSIT_NOTICE_LEN + 3];
+    text[0] = '!';
+    text[1] = ' ';
+    utf8_to_ascii(departure_list.notices[i].message.c_str(), text + 2, sizeof(text) - 2);
+    used += draw_wrapped(text, used, NOTICE_MAX_LINES - used);
+  }
+}
+
 void render_panel(uint16_t panel_x, const char *bucket_label,
-                   void (*draw_icon)(uint16_t, uint16_t), bool bus_bucket) {
+                   void (*draw_icon)(uint16_t, uint16_t), bool bus_bucket, uint8_t max_shown) {
   draw_icon(panel_x, UI_CONTENT_BODY_TOP);
   EPD_ShowString(panel_x + 40, UI_CONTENT_BODY_TOP, bucket_label, 24, BLACK);
 
   const Departure *deps[MAX_SHOWN];
-  uint8_t n = find_next_n(bus_bucket, deps, MAX_SHOWN);
+  uint8_t n = find_next_n(bus_bucket, deps, max_shown);
 
   if (n == 0) {
     EPD_ShowString(panel_x, UI_CONTENT_BODY_TOP + 34, "No departures", 24, BLACK);
@@ -97,9 +167,13 @@ void screen_transit_render() {
     EPD_ShowString(UI_CONTENT_LEFT, UI_CONTENT_BODY_TOP, "No departures yet - waiting for first fetch",
                    24, BLACK);
   } else {
-    EPD_DrawLine(PANEL_DIVIDER_X, UI_CONTENT_BODY_TOP, PANEL_DIVIDER_X, UI_CONTENT_BOTTOM, BLACK);
-    render_panel(LEFT_PANEL_X, "BUS", draw_bus_icon, true);
-    render_panel(RIGHT_PANEL_X, "TRAIN", draw_train_icon, false);
+    bool notices = departure_list.notice_count > 0;
+    uint8_t max_shown = notices ? MAX_SHOWN_WITH_NOTICES : MAX_SHOWN;
+    EPD_DrawLine(PANEL_DIVIDER_X, UI_CONTENT_BODY_TOP, PANEL_DIVIDER_X, notices ? NOTICE_DIVIDER_Y : UI_CONTENT_BOTTOM,
+                 BLACK);
+    render_panel(LEFT_PANEL_X, "BUS", draw_bus_icon, true, max_shown);
+    render_panel(RIGHT_PANEL_X, "TRAIN", draw_train_icon, false, max_shown);
+    if (notices) render_notices();
   }
 
   EPD_ShowString(UI_CONTENT_LEFT, UI_CONTENT_HINT_Y, "OK: refresh   EXIT: home", 16, BLACK);
