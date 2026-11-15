@@ -11,3 +11,10 @@
 // out-of-bounds font-table read. Proper accented glyphs are a
 // possible future visual-polish addition, not attempted here.
 void draw_utf8_string(uint16_t x, uint16_t y, const char *utf8, uint16_t size, uint16_t color);
+
+// Same transliteration as draw_utf8_string(), into a plain-ASCII
+// buffer instead of straight to the panel — for callers that need to
+// measure or wrap text first (every glyph is then exactly size/2 px
+// wide). Newlines and tabs become spaces. Always NUL-terminates
+// (out_size must be >= 1); returns the length written.
+size_t utf8_to_ascii(const char *utf8, char *out, size_t out_size);

@@ -30,6 +30,31 @@ time_t parse_sl_datetime(const char *iso) {
   return mktime(&tm_val);
 }
 
+// Adds one deviation to `list`, keeping its notices deduplicated by
+// message and sorted most important first; a new notice less
+// important than everything in an already-full list is dropped.
+void add_notice(DepartureList &list, JsonVariantConst deviation) {
+  const char *message = deviation["message"].as<const char *>();
+  if (message == nullptr || message[0] == '\0') return;
+  int importance = deviation["importance_level"] | 0;
+
+  String text(message);
+  if (text.length() > MAX_TRANSIT_NOTICE_LEN) text = text.substring(0, MAX_TRANSIT_NOTICE_LEN);
+  for (uint8_t i = 0; i < list.notice_count; i++) {
+    if (list.notices[i].message == text) return;
+  }
+
+  uint8_t pos = list.notice_count;
+  while (pos > 0 && list.notices[pos - 1].importance < importance) pos--;
+  if (pos >= MAX_TRANSIT_NOTICES) return;
+
+  uint8_t last = list.notice_count < MAX_TRANSIT_NOTICES ? list.notice_count : MAX_TRANSIT_NOTICES - 1;
+  for (uint8_t i = last; i > pos; i--) list.notices[i] = list.notices[i - 1];
+  list.notices[pos].message = text;
+  list.notices[pos].importance = importance;
+  if (list.notice_count < MAX_TRANSIT_NOTICES) list.notice_count++;
+}
+
 }  // namespace
 
 bool transit_client_fetch(DepartureList &out, int *http_status) {
@@ -51,14 +76,18 @@ bool transit_client_fetch(DepartureList &out, int *http_status) {
 
   // Field filter: only parse what we display. Keeps peak memory
   // bounded even at a busy stop with many departures, since fields we
-  // don't need (journey, stop_area, stop_point, deviations, ...) are
-  // never allocated into `doc`.
+  // don't need (journey, stop_area, stop_point, deviation scopes, ...)
+  // are never allocated into `doc`.
   JsonDocument filter;
   filter["departures"][0]["destination"] = true;
   filter["departures"][0]["display"] = true;
   filter["departures"][0]["expected"] = true;
   filter["departures"][0]["line"]["designation"] = true;
   filter["departures"][0]["line"]["transport_mode"] = true;
+  filter["departures"][0]["deviations"][0]["message"] = true;
+  filter["departures"][0]["deviations"][0]["importance_level"] = true;
+  filter["stop_deviations"][0]["message"] = true;
+  filter["stop_deviations"][0]["importance_level"] = true;
 
   // The default 8s budget (http_get_json's default) is tuned for small
   // responses like weather's; a busy interchange can return 50+
@@ -87,8 +116,14 @@ bool transit_client_fetch(DepartureList &out, int *http_status) {
     next.valid = true;
     next.fetched_at_ms = millis();
 
+    for (JsonVariantConst dev : doc["stop_deviations"].as<JsonArrayConst>()) add_notice(next, dev);
+
     for (JsonObject dep : doc["departures"].as<JsonArray>()) {
-      if (next.count >= MAX_DEPARTURES) break;
+      // Notices from every returned departure, not just the ones that
+      // fit in MAX_DEPARTURES — a disruption on a later departure of
+      // the same line is still worth knowing about.
+      for (JsonVariantConst dev : dep["deviations"].as<JsonArrayConst>()) add_notice(next, dev);
+      if (next.count >= MAX_DEPARTURES) continue;
       Departure &item = next.items[next.count];
       item.line = dep["line"]["designation"].as<const char *>();
       item.transport_mode = dep["line"]["transport_mode"].as<const char *>();
@@ -102,8 +137,9 @@ bool transit_client_fetch(DepartureList &out, int *http_status) {
   }
   if (http_status != nullptr) *http_status = status;
 
-  Serial.printf("[transit] fetch %s, %u departures, free heap: %u bytes\n", ok ? "ok" : "failed",
-                ok ? (unsigned)out.count : 0u, (unsigned)ESP.getFreeHeap());
+  Serial.printf("[transit] fetch %s, %u departures, %u notices, free heap: %u bytes\n",
+                ok ? "ok" : "failed", ok ? (unsigned)out.count : 0u, ok ? (unsigned)out.notice_count : 0u,
+                (unsigned)ESP.getFreeHeap());
   return ok;
 }
 
