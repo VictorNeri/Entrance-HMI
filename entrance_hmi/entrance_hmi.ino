@@ -4,6 +4,7 @@
 #include <esp_task_wdt.h>
 #include "src/app/app_state.h"
 #include "src/app/error_log.h"
+#include "src/app/ha_pending.h"
 #include "src/app/nav.h"
 #include "src/app/night_mode.h"
 #include "src/input/buttons.h"
@@ -156,7 +157,8 @@ void loop() {
   // Calendar changes redraw regardless of visible screen — the header's
   // pending-events indicator is present on every screen, unlike
   // HA_CONTROL's list which only matters while that screen is shown.
-  if ((ha_updated_visible || mqtt_tick.calendar_changed) && !night_mode_active()) {
+  bool ha_pending_changed = ha_pending_tick() && app_state.current_screen == Screen::HA_CONTROL;
+  if ((ha_updated_visible || ha_pending_changed || mqtt_tick.calendar_changed) && !night_mode_active()) {
     ui_render_current_screen(false);
   }
   // A broadcast message is a full-canvas modal — always force a FULL
@@ -248,10 +250,20 @@ void loop() {
                                                                       : ha_entity_list.count - 1;
       const HaEntity &entity = ha_entity_list.items[index];
       if (entity.action == "toggle") {
-        mqtt_client_publish_toggle(entity.id);
-        // No redraw here — the displayed state only updates once HA's
-        // statestream confirms the change (via mqtt_client_tick()
-        // above), not optimistically.
+        // A second press while the first is still unconfirmed would
+        // just toggle it back — ignore it until HA answers or it times
+        // out.
+        if (ha_pending_status(entity) == HaPendingStatus::WAITING) {
+          Serial.printf("[ha] toggle %s: still waiting, press ignored\n", entity.id.c_str());
+          return;
+        }
+        bool sent = mqtt_client_publish_toggle(entity.id);
+        Serial.printf("[ha] toggle %s: %s\n", entity.id.c_str(), sent ? "sent" : "NOT sent (mqtt down)");
+        ha_pending_start(entity, sent);
+        // Redraw just for the pending note — the displayed state itself
+        // only updates once HA's statestream confirms the change (via
+        // mqtt_client_tick() above), not optimistically.
+        ui_render_current_screen(false);
       }
       return;
     }

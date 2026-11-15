@@ -165,9 +165,9 @@ MqttTickResult mqtt_client_tick() {
   return {ha_changed_flag, calendar_changed_flag, broadcast_changed_flag};
 }
 
-void mqtt_client_publish_toggle(const String &entity_id) {
-  if (!mqtt.connected()) return;
-  mqtt.publish(topic_cmd(entity_id).c_str(), "toggle");
+bool mqtt_client_publish_toggle(const String &entity_id) {
+  if (!mqtt.connected()) return false;
+  return mqtt.publish(topic_cmd(entity_id).c_str(), "toggle");
 }
 
 bool mqtt_is_connected() {
