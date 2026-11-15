@@ -5,6 +5,7 @@
 #include "src/app/app_state.h"
 #include "src/app/error_log.h"
 #include "src/app/nav.h"
+#include "src/app/night_mode.h"
 #include "src/input/buttons.h"
 #include "src/net/fetch_worker.h"
 #include "src/net/mqtt_client.h"
@@ -101,6 +102,10 @@ void setup() {
   Serial.println("Entrance HMI ready.");
 }
 
+// Whether the night screen is what's currently on the panel (see the
+// night-mode block in loop()).
+static bool night_shown = false;
+
 void loop() {
   // Periodic free-heap/WiFi-state log — the M7 soak-test checkpoint
   // for watching heap trend and reconnect resilience over days of
@@ -123,17 +128,21 @@ void loop() {
   // also naturally covers "NTP just synced for the first time" (any
   // real tm_min 0-59 differs from it), replacing the header's "--:--"
   // placeholder as soon as time becomes available.
+  // The minute is still tracked while the night screen is up, so
+  // leaving night mode doesn't also trigger a redundant clock redraw.
   static int last_clock_minute = -1;
   struct tm clock_tm;
   if (time_sync_get_local(clock_tm) && clock_tm.tm_min != last_clock_minute) {
     last_clock_minute = clock_tm.tm_min;
-    ui_render_current_screen(false);
+    if (!night_mode_active()) ui_render_current_screen(false);
   }
 
   // Ghosting hygiene: fires even during long idle periods with no
   // other render trigger (ui_common's own check only fires piggybacked
   // on a render that's already happening for some other reason).
-  if (app_state_needs_forced_full_refresh()) {
+  // Not while the night screen is up — it's static, and the full
+  // refresh on leaving night mode resets the timer anyway.
+  if (!night_mode_active() && app_state_needs_forced_full_refresh()) {
     ui_render_current_screen(true);
   }
 
@@ -147,7 +156,7 @@ void loop() {
   // Calendar changes redraw regardless of visible screen — the header's
   // pending-events indicator is present on every screen, unlike
   // HA_CONTROL's list which only matters while that screen is shown.
-  if (ha_updated_visible || mqtt_tick.calendar_changed) {
+  if ((ha_updated_visible || mqtt_tick.calendar_changed) && !night_mode_active()) {
     ui_render_current_screen(false);
   }
   // A broadcast message is a full-canvas modal — always force a FULL
@@ -155,6 +164,7 @@ void loop() {
   // partial-refresh state the panel was left in.
   if (mqtt_tick.broadcast_changed) {
     ui_render_current_screen(true);
+    night_shown = night_mode_active();  // that render already covered any night on/off change
   }
 
   // Weather/forecast/transit results fetched in the background since
@@ -179,9 +189,33 @@ void loop() {
     ui_render_current_screen(true);
   }
 
+  // Night mode on/off (hours starting/ending, or the wake window after
+  // a button press running out): one full refresh per transition.
+  // Background SL polling pauses while the night screen is up; leaving
+  // it fetches straight away so HOME's NEXT TRAIN isn't hours old.
+  bool night = night_mode_active();
+  fetch_worker_set_transit_paused(night);
+  if (night != night_shown) {
+    night_shown = night;
+    Serial.printf("[night] %s night screen\n", night ? "showing" : "leaving");
+    if (!night) fetch_worker_request_transit();
+    ui_render_current_screen(true);
+  }
+
   ButtonEvent event = buttons_poll();
   if (event.button != Button::NONE) {
     app_state_mark_manual_interaction();
+  }
+
+  // Any press on the night screen just wakes the panel (back to the
+  // normal HOME screen) — it isn't also acted on as navigation.
+  if (night_shown && event.button != Button::NONE) {
+    night_shown = false;
+    fetch_worker_set_transit_paused(false);
+    fetch_worker_request_transit();
+    Serial.println("[night] woken by button");
+    ui_render_current_screen(true);
+    return;
   }
 
   // An unacknowledged broadcast message is a modal — it absorbs every

@@ -65,6 +65,10 @@ void sd_config_load() {
       static_cast<unsigned long>((int)(doc["transit_poll_background_sec"] | 300)) * 1000UL;
   sd_config.screen_rotation_interval_ms =
       static_cast<unsigned long>((int)(doc["screen_rotation_interval_sec"] | 12)) * 1000UL;
+  int night_start = doc["night_start_hour"] | 23;
+  int night_end = doc["night_end_hour"] | 6;
+  sd_config.night_start_hour = (night_start >= 0 && night_start <= 23) ? night_start : 23;
+  sd_config.night_end_hour = (night_end >= 0 && night_end <= 23) ? night_end : 6;
   sd_config.loaded_from_sd = true;
 
   Serial.printf("[sd-config] loaded: ssid=%s site=%s\n", sd_config.wifi_ssid.c_str(),

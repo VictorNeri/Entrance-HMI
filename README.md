@@ -68,7 +68,9 @@ Two layers, deliberately split by how often each one changes and how sensitive i
   "weather_poll_interval_sec": 600,
   "transit_poll_active_sec": 90,
   "transit_poll_background_sec": 300,
-  "screen_rotation_interval_sec": 12
+  "screen_rotation_interval_sec": 12,
+  "night_start_hour": 23,
+  "night_end_hour": 6
 }
 ```
 
@@ -78,6 +80,7 @@ Two layers, deliberately split by how often each one changes and how sensitive i
 - `walk_time_min`: minutes to walk from home to the station. Departures sooner than this are hidden on HOME/TRANSIT entirely, since you can't catch them — `0` (the default) turns the filter off and shows everything fetched. Set it to your real walk time once you know it; there's no way for the firmware to guess it. Internally this also widens the SL fetch window to `walk_time_min + 15` minutes (capped at 30, to stay within a payload size already confirmed safe on this device) so there's still something left to show after filtering.
 - `weather_poll_interval_sec` / `transit_poll_active_sec` / `transit_poll_background_sec`: how often the WEATHER screen refetches, and how often TRANSIT refetches while visible vs. in the background.
 - `screen_rotation_interval_sec`: how long idle (no button press) on any screen other than HOME before it auto-returns to HOME, which then just sits updating until the next button press.
+- `night_start_hour` / `night_end_hour`: night mode window in local hours (0-23, may wrap midnight; defaults 23 and 6). Overnight HOME is replaced by a static night screen: no per-minute clock redraws (less e-paper wear and ghosting) and no background SL polling. Any button press wakes it to the normal HOME screen for 60s; a broadcast message still shows. Set both to the same hour to turn night mode off.
 
 All fields are optional except `wifi_ssid`/`wifi_password`/`sl_site_id` — omitted fields fall back to the defaults shown above (empty string for credentials, meaning that integration just won't connect). If the SD card is missing, unreadable, or the file is invalid JSON, the device still boots on defaults (WiFi/MQTT/weather all stay disconnected until a valid card is inserted and it's rebooted) — check serial output for the specific reason.
 

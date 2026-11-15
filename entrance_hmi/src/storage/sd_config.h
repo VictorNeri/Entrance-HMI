@@ -27,6 +27,11 @@ struct SdConfig {
   // before something automatic happens," just home-return instead of
   // cycling through screens.
   unsigned long screen_rotation_interval_ms = 12UL * 1000;      // SD card/file is missing/invalid
+  // Night mode window, local hours 0-23 (may wrap midnight) — see
+  // app/night_mode.h. Equal values turn night mode off; an out-of-range
+  // value in config.json falls back to the default.
+  uint8_t night_start_hour = 23;
+  uint8_t night_end_hour = 6;
   bool loaded_from_sd = false;
 };
 
