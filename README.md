@@ -4,9 +4,9 @@ Custom firmware for a home entrance display built on the Elecrow CrowPanel ESP32
 
 The active project lives in [`entrance_hmi/`](entrance_hmi/).
 
-## `vendor-reference/`
+## Vendor reference
 
-Everything under [`vendor-reference/`](vendor-reference/) is the original, unmodified vendor package this repo was forked from (Elecrow's factory firmware, schematics, datasheets, and Arduino examples). It's kept only as a lookup reference during development — `entrance_hmi/` takes its own copy of the pieces it needs (see `entrance_hmi/src/epd_driver/`) and does not depend on this directory at build time. `vendor-reference/` can be deleted entirely once it's no longer needed.
+This repo was forked from Elecrow's [CrowPanel ESP32 5.79" E-paper HMI package](https://github.com/Elecrow-RD/CrowPanel-ESP32-5.79-E-paper-HMI-Display-with-272-792) (factory firmware, schematics, datasheets, Arduino examples). That package used to live here under `vendor-reference/`; it was removed to keep the repo small. `entrance_hmi/` has its own copy of the pieces it needs (see `entrance_hmi/src/epd_driver/`). For the originals, use the upstream repo, or `git show 7d3dfd8:vendor-reference/<path>` from this repo's history.
 
 ## Hardware
 
