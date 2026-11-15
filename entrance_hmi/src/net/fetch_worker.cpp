@@ -36,6 +36,7 @@ TaskHandle_t task_handle = nullptr;
 SemaphoreHandle_t staged_lock = nullptr;
 
 std::atomic<bool> transit_active{false};
+std::atomic<bool> transit_paused{false};
 std::atomic<bool> want_weather{false};
 std::atomic<bool> want_transit{false};
 
@@ -125,7 +126,8 @@ void run_due_fetches() {
   now = millis();
   unsigned long transit_interval = transit_active.load() ? sd_config.transit_poll_active_ms
                                                          : sd_config.transit_poll_background_ms;
-  if (transit_schedule.should_fetch(transit_interval, now, forced_transit)) {
+  bool transit_due = forced_transit || !transit_paused.load();
+  if (transit_due && transit_schedule.should_fetch(transit_interval, now, forced_transit)) {
     transit_schedule.mark(now);
     DepartureList next;
     int status = 0;
@@ -177,6 +179,10 @@ void fetch_worker_set_transit_active(bool active) {
 void fetch_worker_request_weather() {
   want_weather.store(true);
   wake_worker();
+}
+
+void fetch_worker_set_transit_paused(bool paused) {
+  transit_paused.store(paused);
 }
 
 void fetch_worker_request_transit() {

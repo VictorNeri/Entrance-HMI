@@ -33,6 +33,11 @@ void fetch_worker_begin();
 // transit_poll_background_ms otherwise. Cheap — call every loop().
 void fetch_worker_set_transit_active(bool active);
 
+// While true, scheduled transit polls are skipped (night mode — nothing
+// on screen shows departures). Explicit fetch_worker_request_transit()
+// calls still run. Cheap — call every loop().
+void fetch_worker_set_transit_paused(bool paused);
+
 // Non-blocking: ask for an immediate refetch (OK button, or arriving
 // on the TRANSIT screen). The result shows up in a later
 // fetch_worker_collect(). Requests made while WiFi is down are kept

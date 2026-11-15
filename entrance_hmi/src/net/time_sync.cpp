@@ -10,6 +10,20 @@ constexpr unsigned long RETRY_INTERVAL_MS = 10UL * 1000;             // before f
 bool synced = false;
 unsigned long last_sync_attempt_ms = 0;
 
+// Non-blocking read of the local clock; true once it holds a real
+// (NTP-set) date. Deliberately not getLocalTime(&tm, 0): the core
+// implements it as `while (millis() - start <= ms) { ...check... }`,
+// so with ms=0 the check never runs at all whenever millis() ticks
+// over between those two reads, and it spuriously returns false — a
+// few times a second when called every loop(). That flipped night mode
+// on and off and could also drop `synced` into the 10s NTP retry loop.
+bool read_local(struct tm &out) {
+  time_t now;
+  time(&now);
+  localtime_r(&now, &out);
+  return out.tm_year > (2016 - 1900);
+}
+
 }  // namespace
 
 void time_sync_tick() {
@@ -23,7 +37,7 @@ void time_sync_tick() {
   last_sync_attempt_ms = now;
 
   struct tm timeinfo;
-  synced = getLocalTime(&timeinfo, synced ? 0 : 3000);
+  synced = synced ? read_local(timeinfo) : getLocalTime(&timeinfo, 3000);
 }
 
 bool time_sync_is_synced() {
@@ -31,7 +45,7 @@ bool time_sync_is_synced() {
 }
 
 bool time_sync_get_local(struct tm &out) {
-  if (!getLocalTime(&out, 0)) {
+  if (!read_local(out)) {
     synced = false;
     return false;
   }

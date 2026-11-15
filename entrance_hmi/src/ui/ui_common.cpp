@@ -1,11 +1,13 @@
 #include "ui_common.h"
 #include "../app/app_state.h"
+#include "../app/night_mode.h"
 #include "../epd_driver/EPD.h"
 #include "../epd_driver/EPD_Init.h"
 #include "../storage/broadcast_store.h"
 #include "screen_broadcast.h"
 #include "screen_ha_control.h"
 #include "screen_home.h"
+#include "screen_night.h"
 #include "screen_status.h"
 #include "screen_transit.h"
 #include "screen_weather.h"
@@ -38,27 +40,33 @@ void ui_init() {
 void ui_render_current_screen(bool force_full_refresh) {
   Paint_Clear(WHITE);
 
-  switch (app_state.current_screen) {
-    case Screen::HOME:
-      screen_home_render();
-      break;
-    case Screen::WEATHER:
-      screen_weather_render();
-      break;
-    case Screen::TRANSIT:
-      screen_transit_render();
-      break;
-    case Screen::HA_CONTROL:
-      screen_ha_control_render();
-      break;
-    case Screen::STATUS:
-      screen_status_render();
-      break;
-  }
+  // Night mode replaces the whole canvas, chrome included (it never
+  // applies with a broadcast pending — see night_mode_active()).
+  if (night_mode_active()) {
+    screen_night_render();
+  } else {
+    switch (app_state.current_screen) {
+      case Screen::HOME:
+        screen_home_render();
+        break;
+      case Screen::WEATHER:
+        screen_weather_render();
+        break;
+      case Screen::TRANSIT:
+        screen_transit_render();
+        break;
+      case Screen::HA_CONTROL:
+        screen_ha_control_render();
+        break;
+      case Screen::STATUS:
+        screen_status_render();
+        break;
+    }
 
-  // Drawn on top of whatever the screen painted, so chrome always wins
-  // at its own regions regardless of any screen miscalculation.
-  ui_chrome_render();
+    // Drawn on top of whatever the screen painted, so chrome always wins
+    // at its own regions regardless of any screen miscalculation.
+    ui_chrome_render();
+  }
 
   // Drawn last, on top of chrome too — an unacknowledged broadcast
   // message is a full-canvas modal that takes over the whole display
