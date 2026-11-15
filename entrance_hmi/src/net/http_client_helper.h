@@ -6,9 +6,11 @@
 // plus valid JSON — on failure `doc` may be partially populated, so
 // check the return value rather than doc's contents.
 //
-// Uses WiFiClientSecure::setInsecure() (no cert pinning) — a deliberate
-// tradeoff for read-only public APIs on a home LAN device; see the
-// project plan for the rationale. Only one such call should be in
+// `root_ca_pem` is the PEM root(s) to trust for this host (see
+// root_certs.h) — required: the server's chain and hostname are
+// verified against it, and there's deliberately no insecure fallback.
+// A verification failure returns false with a "TLS ..." error_log
+// entry. Only one such call should be in
 // flight at a time: the WiFiClientSecure instance is the single
 // biggest transient memory consumer in this firmware.
 // `filter`, if given, is passed to ArduinoJson's DeserializationOption::Filter
@@ -24,7 +26,8 @@
 // `http_status`, if given, receives the HTTP status code (negative for
 // an HTTPClient transport error, 0 if the request never started) — so
 // callers can react to specific codes, e.g. back off on 429.
-bool http_get_json(const char *url, JsonDocument &doc, uint16_t timeout_ms = 8000,
+bool http_get_json(const char *url, const char *root_ca_pem, JsonDocument &doc,
+                    uint16_t timeout_ms = 8000,
                     const JsonDocument *filter = nullptr, const char *context = "http",
                     int *http_status = nullptr);
 constexpr int HTTP_STATUS_TOO_MANY_REQUESTS = 429;

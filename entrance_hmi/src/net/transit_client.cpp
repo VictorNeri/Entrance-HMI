@@ -4,6 +4,7 @@
 #include <time.h>
 #include "../storage/sd_config.h"
 #include "http_client_helper.h"
+#include "root_certs.h"
 #include "time_sync.h"
 #include "wifi_manager.h"
 #include "net_log_shadow.h"
@@ -67,7 +68,7 @@ bool transit_client_fetch(DepartureList &out, int *http_status) {
   // second — confirmed by direct testing against the live SL API.
   JsonDocument doc;
   int status = 0;
-  bool ok = http_get_json(url, doc, 15000, &filter, "transit", &status);
+  bool ok = http_get_json(url, ROOT_CA_SL, doc, 15000, &filter, "transit", &status);
   // ...except when SL is rate-limiting us (429): an immediate retry
   // only adds to the request count that got us limited. The fetch
   // worker backs off instead.
@@ -78,7 +79,7 @@ bool transit_client_fetch(DepartureList &out, int *http_status) {
     // immediately rather than leaving stale data on screen for a full
     // poll interval.
     doc.clear();
-    ok = http_get_json(url, doc, 15000, &filter, "transit", &status);
+    ok = http_get_json(url, ROOT_CA_SL, doc, 15000, &filter, "transit", &status);
   }
 
   if (ok) {
