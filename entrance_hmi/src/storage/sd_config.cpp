@@ -15,6 +15,31 @@ constexpr uint8_t SD_MOSI = 40;
 constexpr uint8_t SD_CS = 10;
 constexpr uint32_t SD_SPI_HZ = 80000000;
 constexpr const char *CONFIG_PATH = "/config.json";
+constexpr const char *MQTT_CA_PATH = "/mqtt_ca.pem";
+// A broker CA (or a short chain) is a few KB; anything far larger isn't
+// a certificate file and would only waste heap.
+constexpr size_t MQTT_CA_MAX_BYTES = 8192;
+
+void load_mqtt_ca() {
+  File f = SD.open(MQTT_CA_PATH, FILE_READ);
+  if (!f) {
+    Serial.println("[sd-config] mqtt_tls is on but /mqtt_ca.pem not found, MQTT stays off");
+    return;
+  }
+  size_t size = f.size();
+  if (size == 0 || size > MQTT_CA_MAX_BYTES) {
+    Serial.printf("[sd-config] /mqtt_ca.pem has bad size (%u bytes), MQTT stays off\n", (unsigned)size);
+    f.close();
+    return;
+  }
+  String pem = f.readString();
+  f.close();
+  if (pem.indexOf("-----BEGIN CERTIFICATE-----") < 0) {
+    Serial.println("[sd-config] /mqtt_ca.pem is not a PEM certificate, MQTT stays off");
+    return;
+  }
+  sd_config.mqtt_ca_pem = pem;
+}
 
 SPIClass sd_spi(HSPI);
 
@@ -49,7 +74,8 @@ void sd_config_load() {
   sd_config.wifi_password = (const char *)(doc["wifi_password"] | "");
   sd_config.sl_site_id = (const char *)(doc["sl_site_id"] | "");
   sd_config.mqtt_host = (const char *)(doc["mqtt_host"] | "");
-  sd_config.mqtt_port = (int)(doc["mqtt_port"] | 1883);
+  sd_config.mqtt_tls = doc["mqtt_tls"] | false;
+  sd_config.mqtt_port = (int)(doc["mqtt_port"] | (sd_config.mqtt_tls ? 8883 : 1883));
   sd_config.mqtt_username = (const char *)(doc["mqtt_username"] | "");
   sd_config.mqtt_password = (const char *)(doc["mqtt_password"] | "");
   sd_config.mqtt_topic_prefix = (const char *)(doc["mqtt_topic_prefix"] | "entrance-hmi");
@@ -69,6 +95,7 @@ void sd_config_load() {
   int night_end = doc["night_end_hour"] | 6;
   sd_config.night_start_hour = (night_start >= 0 && night_start <= 23) ? night_start : 23;
   sd_config.night_end_hour = (night_end >= 0 && night_end <= 23) ? night_end : 6;
+  if (sd_config.mqtt_tls) load_mqtt_ca();
   sd_config.loaded_from_sd = true;
 
   Serial.printf("[sd-config] loaded: ssid=%s site=%s\n", sd_config.wifi_ssid.c_str(),

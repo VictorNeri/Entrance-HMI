@@ -58,6 +58,7 @@ Two layers, deliberately split by how often each one changes and how sensitive i
   "sl_site_id": "9001",
   "mqtt_host": "your-mqtt-broker-ip-or-hostname",
   "mqtt_port": 1883,
+  "mqtt_tls": false,
   "mqtt_username": "",
   "mqtt_password": "",
   "mqtt_topic_prefix": "entrance-hmi",
@@ -76,6 +77,7 @@ Two layers, deliberately split by how often each one changes and how sensitive i
 
 - `sl_site_id`: your nearest SL stop's site ID — look it up via `https://transport.integration.sl.se/v1/sites` (search the JSON by stop name) or trafiklab.se's stop lookup. `9001` is T-Centralen, a placeholder.
 - `mqtt_host`/`mqtt_port`/`mqtt_username`/`mqtt_password`/`mqtt_topic_prefix`: your MQTT broker for the Home Assistant control screen and calendar events. Leave `mqtt_username` empty for anonymous/no-auth brokers.
+- `mqtt_tls`: connect to the broker over TLS (default `false`). See [MQTT security](#mqtt-security). With it on, `mqtt_port` defaults to `8883`.
 - `owm_api_key`/`owm_lat`/`owm_lon`: your OpenWeatherMap API key and coordinates (lat/lon preferred over city-name lookup — unambiguous and stable).
 - `walk_time_min`: minutes to walk from home to the station. Departures sooner than this are hidden on HOME/TRANSIT entirely, since you can't catch them — `0` (the default) turns the filter off and shows everything fetched. Set it to your real walk time once you know it; there's no way for the firmware to guess it. Internally this also widens the SL fetch window to `walk_time_min + 15` minutes (capped at 30, to stay within a payload size already confirmed safe on this device) so there's still something left to show after filtering.
 - `weather_poll_interval_sec` / `transit_poll_active_sec` / `transit_poll_background_sec`: how often the WEATHER screen refetches, and how often TRANSIT refetches while visible vs. in the background.
@@ -131,6 +133,50 @@ All topics are prefixed with `mqtt_topic_prefix` from `/config.json` (default `e
 **`<prefix>/status`** (publish, retained, LWT) — `"online"` while connected, `"offline"` if the device drops off ungracefully.
 
 **`<prefix>/cmd/<entity_id>`** (publish, from the device) — `"toggle"`, sent when OK is pressed on a HA_CONTROL entity with `"action": "toggle"`.
+
+## MQTT security
+
+By default the panel talks to the broker in plaintext on 1883, so the MQTT username/password and every message (button config, toggle commands, broadcasts) cross the LAN readable by anyone on it. Two independent things fix that: TLS on the connection, and an access list on the broker so the panel's login can only touch its own topics.
+
+### TLS
+
+1. Give the broker a TLS listener (Mosquitto: `listener 8883` with `cafile`/`certfile`/`keyfile`). The server certificate must name the address in `mqtt_host`: a DNS name in its subjectAltName, or `IP:<addr>` if `mqtt_host` is an IP.
+2. Copy the CA that signed the broker's certificate (PEM, the `-----BEGIN CERTIFICATE-----` text, under 8 KB) to the SD card as `/mqtt_ca.pem`. It's a public certificate, not a secret.
+3. Set `"mqtt_tls": true` in `/config.json` (and `mqtt_port` if the listener isn't on 8883), then reboot.
+
+The panel only connects if the broker's certificate chains to that CA and matches `mqtt_host`. If `mqtt_tls` is on and `/mqtt_ca.pem` is missing or not a PEM certificate, MQTT stays off and the STATUS screen says so; it never falls back to plaintext or to an unverified connection. A rejected certificate shows as `mqtt: TLS failed (-0x2700)` on STATUS, with the reason on the network log (`[mqtt] TLS connect failed: ...`).
+
+A self-signed CA for a home broker:
+
+```bash
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 3650 \
+  -subj "/CN=home-mqtt-ca" -keyout ca.key -out ca.crt
+openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+  -subj "/CN=mqtt" -keyout server.key -out server.csr
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 825 \
+  -extfile <(printf "subjectAltName=DNS:homeassistant.local,IP:192.168.1.10") -out server.crt
+```
+
+`ca.crt` goes on the SD card as `/mqtt_ca.pem`; `server.crt`/`server.key` go to the broker. Keep `ca.key` off the broker and the panel. The panel checks certificate dates against its NTP clock, so renew `server.crt` before it expires. TLS costs about 40 KB of the panel's free heap (about 155 KB down to 115 KB).
+
+Home Assistant's Mosquitto add-on: put `server.crt`/`server.key` in `/ssl`, set the add-on's `certfile`/`keyfile` options to them, and map port 8883 in its network settings. Keep 1883 open until the panel is switched over, then close it if nothing else needs it.
+
+### Access list
+
+Give the panel its own broker login and limit it to what it uses. A Mosquitto `acl_file` entry, for the default `entrance-hmi` prefix:
+
+```
+user entrance-hmi
+topic read entrance-hmi/config/#
+topic read entrance-hmi/broadcast/message
+topic write entrance-hmi/broadcast/ack
+topic write entrance-hmi/status
+topic write entrance-hmi/cmd/#
+# plus each button's state_topic, e.g.:
+topic read homeassistant/light/+/state
+```
+
+A stolen panel password then can't publish fake state, read other devices' traffic, or toggle anything beyond its own `cmd/` topics (what those trigger is still up to the Home Assistant automation listening there). Also restrict who can publish to `entrance-hmi/config/#` and `entrance-hmi/broadcast/message`: those set the panel's buttons and put a message on its screen. With the Mosquitto add-on, enable `customize` and put the `acl_file` line in a `.conf` file in `/share/mosquitto`.
 
 ## Network debug log
 
