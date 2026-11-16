@@ -10,6 +10,13 @@ struct SdConfig {
   String mqtt_username;
   String mqtt_password;
   String mqtt_topic_prefix = "entrance-hmi";
+  // MQTT over TLS (mqtts). Off by default. When on, the broker's
+  // certificate must chain to the PEM CA in /mqtt_ca.pem on the SD card
+  // and match mqtt_host (a hostname, or an IP listed as an IP SAN); with
+  // no usable CA file the client refuses to connect rather than falling
+  // back to plaintext or an unverified connection.
+  bool mqtt_tls = false;
+  String mqtt_ca_pem;
   String owm_api_key;
   String owm_lat;
   String owm_lon;

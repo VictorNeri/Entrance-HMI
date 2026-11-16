@@ -1,6 +1,7 @@
 #include "mqtt_client.h"
 #include <PubSubClient.h>
 #include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include <stdio.h>
 #include "../../config.h"
 #include "../app/error_log.h"
@@ -14,8 +15,18 @@
 
 namespace {
 
-WiFiClient net_client;
-PubSubClient mqtt(net_client);
+WiFiClient plain_client;
+WiFiClientSecure tls_client;
+PubSubClient mqtt;
+
+// Set once at init: TLS on but no usable CA. Never connects then — the
+// alternatives (plaintext, or TLS without verifying the broker) would
+// silently give up exactly what mqtt_tls was turned on for.
+bool tls_misconfigured = false;
+
+// Bounds the TLS handshake, which otherwise defaults to 120s — this
+// runs on loop(), under a 60s task watchdog.
+constexpr uint32_t TLS_HANDSHAKE_TIMEOUT_S = 10;
 
 String topic_config;
 String topic_calendar;
@@ -107,14 +118,24 @@ bool connect() {
     mqtt.subscribe(topic_calendar.c_str());
     mqtt.subscribe(topic_broadcast.c_str());
     resubscribe_state_topics();
-    Serial.println("[mqtt] connected");
+    Serial.println(sd_config.mqtt_tls ? "[mqtt] connected (TLS)" : "[mqtt] connected");
   } else {
     // PubSubClient's state() is a small negative/positive error code
     // (see PubSubClient.h) — not a human string, but enough to
     // distinguish "broker unreachable" from "auth rejected" etc. on
     // the STATUS screen without needing a lookup table here.
     char msg[64];
-    snprintf(msg, sizeof(msg), "mqtt: connect failed (state %d)", mqtt.state());
+    if (sd_config.mqtt_tls && mqtt.state() == MQTT_CONNECT_FAILED) {
+      // TLS failures (untrusted or mismatched broker certificate,
+      // handshake timeout) all surface as PubSubClient state -2
+      // "connect failed"; mbedTLS's own error says which.
+      char tls_err[96];
+      int code = tls_client.lastError(tls_err, sizeof(tls_err));
+      Serial.printf("[mqtt] TLS connect failed: -0x%04x %s\n", -code, tls_err);
+      snprintf(msg, sizeof(msg), "mqtt: TLS failed (-0x%04x)", -code);
+    } else {
+      snprintf(msg, sizeof(msg), "mqtt: connect failed (state %d)", mqtt.state());
+    }
     error_log_set(msg);
   }
   return ok;
@@ -131,6 +152,19 @@ MqttTickResult mqtt_client_tick() {
     topic_broadcast = sd_config.mqtt_topic_prefix + "/broadcast/message";
     topic_broadcast_ack = sd_config.mqtt_topic_prefix + "/broadcast/ack";
     topic_status = sd_config.mqtt_topic_prefix + "/status";
+    if (sd_config.mqtt_tls) {
+      if (sd_config.mqtt_ca_pem.length() == 0) {
+        tls_misconfigured = true;
+        error_log_set("mqtt: TLS on, no CA in /mqtt_ca.pem");
+      }
+      // setCACert keeps the pointer, not a copy — sd_config.mqtt_ca_pem
+      // lives (unchanged) for the life of the program.
+      tls_client.setCACert(sd_config.mqtt_ca_pem.c_str());
+      tls_client.setHandshakeTimeout(TLS_HANDSHAKE_TIMEOUT_S);
+      mqtt.setClient(tls_client);
+    } else {
+      mqtt.setClient(plain_client);
+    }
     mqtt.setServer(sd_config.mqtt_host.c_str(), sd_config.mqtt_port);
     // Default 256B is far too small — button-config already needed
     // 1024B, and calendar payloads (several events, each with a title
@@ -149,6 +183,8 @@ MqttTickResult mqtt_client_tick() {
     mqtt.setCallback(on_message);
     topics_initialized = true;
   }
+
+  if (tls_misconfigured) return {};
 
   if (!mqtt.connected()) {
     unsigned long now = millis();
