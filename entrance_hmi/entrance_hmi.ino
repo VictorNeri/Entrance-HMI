@@ -114,8 +114,16 @@ void loop() {
   static unsigned long last_heartbeat_ms = 0;
   if (millis() - last_heartbeat_ms >= 60UL * 1000) {
     last_heartbeat_ms = millis();
-    Serial.printf("[heartbeat] up=%lums wifi=%d rssi=%d heap=%u\n", millis(), wifi_is_connected(),
-                  wifi_get_rssi(), (unsigned)ESP.getFreeHeap());
+    // Local time and night state too — the clock is otherwise only
+    // visible on the panel itself.
+    char clock_str[24] = "unsynced";
+    struct tm hb_tm;
+    if (time_sync_get_local(hb_tm)) {
+      snprintf(clock_str, sizeof(clock_str), "%04d-%02d-%02d %02d:%02d:%02d", hb_tm.tm_year + 1900, hb_tm.tm_mon + 1,
+               hb_tm.tm_mday, hb_tm.tm_hour, hb_tm.tm_min, hb_tm.tm_sec);
+    }
+    Serial.printf("[heartbeat] up=%lums time=%s night=%d wifi=%d rssi=%d heap=%u\n", millis(), clock_str,
+                  night_mode_active(), wifi_is_connected(), wifi_get_rssi(), (unsigned)ESP.getFreeHeap());
   }
 
   wifi_manager_tick();

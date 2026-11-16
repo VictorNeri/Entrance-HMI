@@ -7,7 +7,15 @@ namespace {
 constexpr unsigned long RESYNC_INTERVAL_MS = 12UL * 60 * 60 * 1000;  // ~12h once synced
 constexpr unsigned long RETRY_INTERVAL_MS = 10UL * 1000;             // before first sync
 
+// Set only by time_sync_tick(), i.e. once configTzTime() has started
+// SNTP. Never by merely reading a valid-looking clock: after a soft
+// reset (OTA flash, watchdog) the ESP32 keeps its system time, so the
+// clock reads valid before any sync — and when time_sync_get_local()
+// used to set this from that, the tick saw "synced", waited the 12h
+// resync interval, and SNTP and the time zone were never set up. The
+// panel then ran on UTC for 12h after every OTA flash.
 bool synced = false;
+bool tz_set = false;
 unsigned long last_sync_attempt_ms = 0;
 
 // Non-blocking read of the local clock; true once it holds a real
@@ -18,6 +26,13 @@ unsigned long last_sync_attempt_ms = 0;
 // few times a second when called every loop(). That flipped night mode
 // on and off and could also drop `synced` into the 10s NTP retry loop.
 bool read_local(struct tm &out) {
+  // TZ before the first sync too, so a clock carried over a soft reset
+  // reads as local time right away, not UTC until configTzTime().
+  if (!tz_set) {
+    setenv("TZ", TZ_STRING, 1);
+    tzset();
+    tz_set = true;
+  }
   time_t now;
   time(&now);
   localtime_r(&now, &out);
@@ -45,10 +60,5 @@ bool time_sync_is_synced() {
 }
 
 bool time_sync_get_local(struct tm &out) {
-  if (!read_local(out)) {
-    synced = false;
-    return false;
-  }
-  synced = true;
-  return true;
+  return read_local(out);
 }
