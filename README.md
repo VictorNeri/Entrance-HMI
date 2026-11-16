@@ -41,7 +41,7 @@ Arduino IDE: set these in Tools menu after selecting the board. `arduino-cli`:
 arduino-cli compile --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=enabled" entrance_hmi
 ```
 
-CI (`.github/workflows/build.yml`) runs this same compile on every PR and push to `master` that touches `entrance_hmi/`, against a pinned ESP32 core (3.3.11) and library versions (ArduinoJson 7.4.3, PubSubClient 2.8), using `config.example.h` as `config.h`. The built `.bin` is attached to each run as an artifact — it carries the example's placeholder OTA password, so it's for checking a build, not for flashing as-is.
+CI (`.github/workflows/build.yml`) runs this same compile on every PR and push to `master` that touches `entrance_hmi/`, against a pinned arduino-cli (1.5.1), ESP32 core (3.3.11) and library versions (ArduinoJson 7.4.3, PubSubClient 2.8), using `config.example.h` as `config.h`. The built `.bin` is attached to each run as an artifact — it carries the example's placeholder OTA password, so it's for checking a build, not for flashing as-is.
 
 ## Configuration
 
