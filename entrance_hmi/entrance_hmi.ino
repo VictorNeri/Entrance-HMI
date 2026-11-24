@@ -4,6 +4,7 @@
 #include <esp_task_wdt.h>
 #include "src/app/app_state.h"
 #include "src/app/error_log.h"
+#include "src/app/fw_version.h"
 #include "src/app/ha_pending.h"
 #include "src/app/nav.h"
 #include "src/app/night_mode.h"
@@ -74,6 +75,7 @@ void setup() {
   Serial.begin(115200);
   delay(500);
   watchdog_begin();
+  Serial.printf("[boot] firmware %s built %s\n", FW_VERSION, FW_BUILT);
   log_reset_reason();
 
   ui_init();
@@ -122,8 +124,8 @@ void loop() {
       snprintf(clock_str, sizeof(clock_str), "%04d-%02d-%02d %02d:%02d:%02d", hb_tm.tm_year + 1900, hb_tm.tm_mon + 1,
                hb_tm.tm_mday, hb_tm.tm_hour, hb_tm.tm_min, hb_tm.tm_sec);
     }
-    Serial.printf("[heartbeat] up=%lums time=%s night=%d wifi=%d rssi=%d heap=%u\n", millis(), clock_str,
-                  night_mode_active(), wifi_is_connected(), wifi_get_rssi(), (unsigned)ESP.getFreeHeap());
+    Serial.printf("[heartbeat] up=%lums time=%s night=%d wifi=%d rssi=%d heap=%u fw=%s\n", millis(), clock_str,
+                  night_mode_active(), wifi_is_connected(), wifi_get_rssi(), (unsigned)ESP.getFreeHeap(), FW_VERSION);
   }
 
   wifi_manager_tick();

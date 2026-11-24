@@ -5,10 +5,12 @@ on:
     branches: [master]
     paths:
       - "entrance_hmi/**"
+      - "scripts/build.sh"
       - ".github/workflows/build.yml"
   pull_request:
     paths:
       - "entrance_hmi/**"
+      - "scripts/build.sh"
       - ".github/workflows/build.yml"
   workflow_dispatch:
 
@@ -87,8 +89,9 @@ jobs:
         # still fails the step despite being piped through tee.
         shell: bash
         run: |
-          arduino-cli compile --fqbn "$FQBN" --warnings default \
-            --output-dir build entrance_hmi 2>&1 | tee compile.log
+          # Same script as local builds, so the .bin is stamped with the
+          # commit it was built from (STATUS screen, heartbeat).
+          ARDUINO_CLI_FLAGS="--warnings default" scripts/build.sh build 2>&1 | tee compile.log
           # Surface the flash/RAM usage lines in the job summary.
           {
             echo '### Firmware size'

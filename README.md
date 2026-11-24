@@ -35,13 +35,15 @@ Board: `esp32:esp32:esp32s3`. **Set these board options before compiling/flashin
 - Partition Scheme: `8M with spiffs (3MB APP/1.5MB SPIFFS)`
 - PSRAM: `QSPI PSRAM` (Enabled)
 
-Arduino IDE: set these in Tools menu after selecting the board. `arduino-cli`:
+Arduino IDE: set these in Tools menu after selecting the board. `arduino-cli`, via the build script (output in `build/`):
 
 ```bash
-arduino-cli compile --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=enabled" entrance_hmi
+scripts/build.sh
 ```
 
-CI (`.github/workflows/build.yml`) runs this same compile on every PR and push to `master` that touches `entrance_hmi/`, on a pinned Ubuntu 26.04 runner, against a pinned arduino-cli (1.5.1), ESP32 core (3.3.11) and library versions (ArduinoJson 7.4.3, PubSubClient 2.8), using `config.example.h` as `config.h`. The built `.bin` is attached to each run as an artifact — it carries the example's placeholder OTA password, so it's for checking a build, not for flashing as-is.
+The script runs `arduino-cli compile` with the options above and stamps the build with its git revision (`-dirty` if the tree has uncommitted changes) and UTC build time. The panel shows these on the STATUS screen (`Firmware: d7cd1da  built 2026-11-24T20:48Z`), at boot, and as `fw=` in the network log heartbeat, so you can tell which build is running. A build made without the script (Arduino IDE, or plain `arduino-cli compile --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=enabled" entrance_hmi`) works the same but reports `dev` and its compile date.
+
+CI (`.github/workflows/build.yml`) runs this same script on every PR and push to `master` that touches `entrance_hmi/` or the script, on a pinned Ubuntu 26.04 runner, against a pinned arduino-cli (1.5.1), ESP32 core (3.3.11) and library versions (ArduinoJson 7.4.3, PubSubClient 2.8), using `config.example.h` as `config.h`. The built `.bin` is attached to each run as an artifact — it carries the example's placeholder OTA password, so it's for checking a build, not for flashing as-is.
 
 ## Configuration
 
