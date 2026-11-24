@@ -9,6 +9,7 @@
 #include "../storage/button_config_store.h"
 #include "../storage/calendar_store.h"
 #include "../storage/sd_config.h"
+#include "ha_discovery.h"
 #include "time_sync.h"
 #include "wifi_manager.h"
 #include "net_log_shadow.h"
@@ -33,9 +34,11 @@ String topic_calendar;
 String topic_broadcast;
 String topic_broadcast_ack;
 String topic_status;
+String topic_telemetry;
 bool topics_initialized = false;
 
 unsigned long last_reconnect_attempt_ms = 0;
+unsigned long last_telemetry_ms = 0;
 constexpr unsigned long RECONNECT_INTERVAL_MS = 5000;
 
 bool ha_changed_flag = false;
@@ -105,6 +108,33 @@ void on_message(char *topic, uint8_t *payload, unsigned int length) {
   }
 }
 
+// Retained, so HA picks the device up whenever it (re)starts. Sent with
+// the streaming publish because it's bigger than the client buffer.
+// With discovery turned off, an empty retained payload removes a device
+// an earlier run may have created.
+void publish_ha_discovery() {
+  String topic = ha_discovery_config_topic();
+  String payload = sd_config.ha_discovery
+                       ? ha_discovery_config_payload(topic_telemetry, topic_status)
+                       : String();
+  bool ok = mqtt.beginPublish(topic.c_str(), payload.length(), true) &&
+            mqtt.write(reinterpret_cast<const uint8_t *>(payload.c_str()), payload.length()) ==
+                payload.length() &&
+            mqtt.endPublish();
+  if (!ok) {
+    Serial.println("[mqtt] HA discovery publish failed");
+  } else if (sd_config.ha_discovery) {
+    Serial.printf("[mqtt] HA discovery published (%u bytes)\n", (unsigned)payload.length());
+  }
+}
+
+void publish_telemetry() {
+  last_telemetry_ms = millis();
+  if (!sd_config.ha_discovery) return;
+  String payload = ha_telemetry_payload();
+  mqtt.publish(topic_telemetry.c_str(), payload.c_str(), true);
+}
+
 bool connect() {
   bool ok = sd_config.mqtt_username.length() > 0
                 ? mqtt.connect(MQTT_CLIENT_ID, sd_config.mqtt_username.c_str(),
@@ -119,6 +149,8 @@ bool connect() {
     mqtt.subscribe(topic_broadcast.c_str());
     resubscribe_state_topics();
     Serial.println(sd_config.mqtt_tls ? "[mqtt] connected (TLS)" : "[mqtt] connected");
+    publish_ha_discovery();
+    publish_telemetry();
   } else {
     // PubSubClient's state() is a small negative/positive error code
     // (see PubSubClient.h) — not a human string, but enough to
@@ -152,6 +184,7 @@ MqttTickResult mqtt_client_tick() {
     topic_broadcast = sd_config.mqtt_topic_prefix + "/broadcast/message";
     topic_broadcast_ack = sd_config.mqtt_topic_prefix + "/broadcast/ack";
     topic_status = sd_config.mqtt_topic_prefix + "/status";
+    topic_telemetry = sd_config.mqtt_topic_prefix + "/telemetry";
     if (sd_config.mqtt_tls) {
       if (sd_config.mqtt_ca_pem.length() == 0) {
         tls_misconfigured = true;
@@ -198,6 +231,9 @@ MqttTickResult mqtt_client_tick() {
   calendar_changed_flag = false;
   broadcast_changed_flag = false;
   mqtt.loop();
+  if (mqtt.connected() && millis() - last_telemetry_ms >= HA_TELEMETRY_INTERVAL_MS) {
+    publish_telemetry();
+  }
   return {ha_changed_flag, calendar_changed_flag, broadcast_changed_flag};
 }
 

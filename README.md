@@ -64,6 +64,8 @@ Two layers, deliberately split by how often each one changes and how sensitive i
   "mqtt_username": "",
   "mqtt_password": "",
   "mqtt_topic_prefix": "entrance-hmi",
+  "ha_discovery": true,
+  "ha_discovery_prefix": "homeassistant",
   "owm_api_key": "your-openweathermap-api-key",
   "owm_lat": "59.3293",
   "owm_lon": "18.0686",
@@ -80,6 +82,7 @@ Two layers, deliberately split by how often each one changes and how sensitive i
 - `sl_site_id`: your nearest SL stop's site ID — look it up via `https://transport.integration.sl.se/v1/sites` (search the JSON by stop name) or trafiklab.se's stop lookup. `9001` is T-Centralen, a placeholder.
 - `mqtt_host`/`mqtt_port`/`mqtt_username`/`mqtt_password`/`mqtt_topic_prefix`: your MQTT broker for the Home Assistant control screen and calendar events. Leave `mqtt_username` empty for anonymous/no-auth brokers.
 - `mqtt_tls`: connect to the broker over TLS (default `false`). See [MQTT security](#mqtt-security). With it on, `mqtt_port` defaults to `8883`.
+- `ha_discovery` / `ha_discovery_prefix`: publish the panel to Home Assistant as a device (default on, under HA's default `homeassistant` discovery prefix). See [Home Assistant device](#home-assistant-device). Setting `ha_discovery` to `false` also removes a device created earlier.
 - `owm_api_key`/`owm_lat`/`owm_lon`: your OpenWeatherMap API key and coordinates (lat/lon preferred over city-name lookup — unambiguous and stable).
 - `walk_time_min`: minutes to walk from home to the station. Departures sooner than this are hidden on HOME/TRANSIT entirely, since you can't catch them — `0` (the default) turns the filter off and shows everything fetched. Set it to your real walk time once you know it; there's no way for the firmware to guess it. Internally this also widens the SL fetch window to `walk_time_min + 15` minutes (capped at 30, to stay within a payload size already confirmed safe on this device) so there's still something left to show after filtering.
 - `weather_poll_interval_sec` / `transit_poll_active_sec` / `transit_poll_background_sec`: how often the WEATHER screen refetches, and how often TRANSIT refetches while visible vs. in the background.
@@ -136,6 +139,45 @@ All topics are prefixed with `mqtt_topic_prefix` from `/config.json` (default `e
 
 **`<prefix>/cmd/<entity_id>`** (publish, from the device) — `"toggle"`, sent when OK is pressed on a HA_CONTROL entity with `"action": "toggle"`.
 
+**`<prefix>/telemetry`** (publish, retained) — the panel's own health, on connect and every 60s, feeding the Home Assistant device below:
+```json
+{"rssi": -63, "heap": 152800, "uptime_s": 51533, "ip": "10.117.60.23", "fw": "d7cd1da", "last_error": "none",
+ "night": false, "weather_age_min": 3, "transit_age_min": 1, "stale": false}
+```
+`weather_age_min`/`transit_age_min` are `-1` until the first successful fetch.
+
+**`homeassistant/device/entrance-hmi/config`** (publish, retained) — the Home Assistant discovery message, on every connect.
+
+## Home Assistant device
+
+With MQTT discovery on (the default; Home Assistant's MQTT integration has it on by default too), the panel appears in Home Assistant as an **Entrance HMI** device, with no YAML needed. It shows as unavailable whenever `<prefix>/status` is `offline`, and its firmware version is the build's git revision (see [Build](#build)).
+
+| Entity | What it shows |
+|---|---|
+| Data stale (problem) | On when weather or transit data is overdue: the same rule as the panel's "25m ago" badges. Sources without an API key / site ID are ignored, and transit is ignored during night hours, when polling pauses. |
+| Weather data age, Transit data age | Minutes since the last successful fetch. |
+| Wi-Fi signal, Free heap, Uptime, IP address, Firmware, Night mode, Last error | Diagnostics, from the telemetry above. |
+
+An alert for a panel that has stopped updating or dropped off the network:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.entrance_hmi_data_stale
+    to: "on"
+    for: "00:10:00"
+  - trigger: state
+    entity_id: binary_sensor.entrance_hmi_data_stale
+    to: "unavailable"
+    for: "00:10:00"
+actions:
+  - action: notify.notify
+    data:
+      message: "Entrance HMI: data stale or panel offline"
+```
+
+The entity IDs depend on your HA language and any renames; check the device page for the real ones.
+
 ## MQTT security
 
 By default the panel talks to the broker in plaintext on 1883, so the MQTT username/password and every message (button config, toggle commands, broadcasts) cross the LAN readable by anyone on it. Two independent things fix that: TLS on the connection, and an access list on the broker so the panel's login can only touch its own topics.
@@ -174,6 +216,8 @@ topic read entrance-hmi/broadcast/message
 topic write entrance-hmi/broadcast/ack
 topic write entrance-hmi/status
 topic write entrance-hmi/cmd/#
+topic write entrance-hmi/telemetry
+topic write homeassistant/device/entrance-hmi/config
 # plus each button's state_topic, e.g.:
 topic read homeassistant/light/+/state
 ```

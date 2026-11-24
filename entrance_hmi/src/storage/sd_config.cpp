@@ -79,6 +79,8 @@ void sd_config_load() {
   sd_config.mqtt_username = (const char *)(doc["mqtt_username"] | "");
   sd_config.mqtt_password = (const char *)(doc["mqtt_password"] | "");
   sd_config.mqtt_topic_prefix = (const char *)(doc["mqtt_topic_prefix"] | "entrance-hmi");
+  sd_config.ha_discovery = doc["ha_discovery"] | true;
+  sd_config.ha_discovery_prefix = (const char *)(doc["ha_discovery_prefix"] | "homeassistant");
   sd_config.owm_api_key = (const char *)(doc["owm_api_key"] | "");
   sd_config.owm_lat = (const char *)(doc["owm_lat"] | "");
   sd_config.owm_lon = (const char *)(doc["owm_lon"] | "");
