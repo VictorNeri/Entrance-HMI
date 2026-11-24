@@ -109,7 +109,7 @@ void on_message(char *topic, uint8_t *payload, unsigned int length) {
 }
 
 // Retained, so HA picks the device up whenever it (re)starts. Sent with
-// the streaming publish because it's bigger than the client buffer.
+// the streaming publish, which isn't bound by the client buffer.
 // With discovery turned off, an empty retained payload removes a device
 // an earlier run may have created.
 void publish_ha_discovery() {

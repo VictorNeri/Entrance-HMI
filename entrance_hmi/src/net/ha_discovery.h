@@ -16,8 +16,9 @@ constexpr unsigned long HA_TELEMETRY_INTERVAL_MS = 60UL * 1000;
 // <discovery prefix>/device/<MQTT_CLIENT_ID>/config
 String ha_discovery_config_topic();
 
-// The retained device-discovery payload (about 2.5 KB — larger than
-// the MQTT client's buffer, so it's sent with the streaming publish).
+// The retained device-discovery payload (about 2.2 KB, close to the
+// MQTT client's 3 KB buffer, so it's sent with the streaming publish
+// and adding entities can't silently push it over).
 String ha_discovery_config_payload(const String &telemetry_topic, const String &status_topic);
 
 // Current telemetry as JSON. Main thread only (reads the UI's data
