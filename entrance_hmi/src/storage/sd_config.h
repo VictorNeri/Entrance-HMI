@@ -16,6 +16,10 @@ struct SdConfig {
   // no usable CA file the client refuses to connect rather than falling
   // back to plaintext or an unverified connection.
   bool mqtt_tls = false;
+  // Home Assistant MQTT discovery (src/net/ha_discovery.h): the panel
+  // appears in HA as a device with diagnostic sensors. On by default.
+  bool ha_discovery = true;
+  String ha_discovery_prefix = "homeassistant";
   String mqtt_ca_pem;
   String owm_api_key;
   String owm_lat;
